@@ -7,16 +7,6 @@ import (
 	fsrepo "github.com/ipfs/go-ipfs/repo/fsrepo"
 )
 
-// Default configuration results in a local node that
-// attempts to draw from the default ipfs filesotre location
-var DefaultConfig = &StoreCfg{
-	BuildCfg: core.BuildCfg{
-		Online: false,
-	},
-	FsRepoPath: "~/ipfs",
-	Ctx:        context.Background(),
-}
-
 // StoreCfg configures the datastore
 type StoreCfg struct {
 	// embed options for creating a node
@@ -27,6 +17,18 @@ type StoreCfg struct {
 	Node *core.IpfsNode
 	// operating context
 	Ctx context.Context
+}
+
+// Default configuration results in a local node that
+// attempts to draw from the default ipfs filesotre location
+func DefaultConfig() *StoreCfg {
+	return &StoreCfg{
+		BuildCfg: core.BuildCfg{
+			Online: false,
+		},
+		FsRepoPath: "~/ipfs",
+		Ctx:        context.Background(),
+	}
 }
 
 func (cfg *StoreCfg) InitRepo() error {

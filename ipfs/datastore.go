@@ -36,7 +36,7 @@ type Datastore struct {
 }
 
 func NewDatastore(config ...func(cfg *StoreCfg)) (*Datastore, error) {
-	cfg := DefaultConfig
+	cfg := DefaultConfig()
 	for _, c := range config {
 		c(cfg)
 	}
