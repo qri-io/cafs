@@ -1,6 +1,3 @@
-// IT'S DATASTORES ALL THE WAY DOWN.
-// ipfs_datastore turns an ipfs node into an ipfs/datastore
-// It only supports Get, Put, Delete, and Has.
 package ipfs_datastore
 
 import (
@@ -65,12 +62,16 @@ func (ds *Datastore) Has(key relds.Key) (exists bool, err error) {
 	return false, fmt.Errorf("has is unsupported")
 }
 
-func (ds *Datastore) Get(key relds.Key) (interface{}, error) {
+func (ds *Datastore) Get(key relds.Key) ([]byte, error) {
 	return ds.getKey(key)
 }
 
-func (ds *Datastore) Put(key relds.Key, value interface{}) error {
-	return fmt.Errorf("put is unsupported")
+func (ds *Datastore) Put(data []byte) (key relds.Key, err error) {
+	hash, err := ds.AddAndPinBytes(data)
+	if err != nil {
+		return relds.NewKey(""), err
+	}
+	return relds.NewKey("/ipfs/" + hash), nil
 }
 
 func (ds *Datastore) Delete(relds.Key) error {
@@ -85,7 +86,7 @@ func (ds *Datastore) Batch() (relds.Batch, error) {
 	return nil, relds.ErrBatchUnsupported
 }
 
-func (ds *Datastore) getKey(key relds.Key) (interface{}, error) {
+func (ds *Datastore) getKey(key relds.Key) ([]byte, error) {
 	p := path.Path(key.String())
 	node := ds.node
 	dn, err := core.Resolve(node.Context(), node.Namesys, node.Resolver, p)

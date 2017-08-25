@@ -26,7 +26,7 @@ func DefaultConfig() *StoreCfg {
 		BuildCfg: core.BuildCfg{
 			Online: false,
 		},
-		FsRepoPath: "~/ipfs",
+		FsRepoPath: "~/.ipfs",
 		Ctx:        context.Background(),
 	}
 }
