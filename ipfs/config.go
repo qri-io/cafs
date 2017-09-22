@@ -11,10 +11,10 @@ import (
 type StoreCfg struct {
 	// embed options for creating a node
 	core.BuildCfg
-	// path to a local filesystem fs repo
-	FsRepoPath string
 	// optionally just supply a node. will override everything
 	Node *core.IpfsNode
+	// path to a local filesystem fs repo
+	FsRepoPath string
 	// operating context
 	Ctx context.Context
 }

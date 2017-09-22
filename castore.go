@@ -72,6 +72,7 @@ type Adder interface {
 // AddedFile reports on the results of adding a file to the store
 // TODO - add filepath to this struct
 type AddedFile struct {
+	Path  datastore.Key
 	Name  string
 	Bytes int64
 	Hash  string

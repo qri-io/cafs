@@ -25,7 +25,6 @@ func (m MapStore) Put(data []byte, pin bool) (key datastore.Key, err error) {
 	}
 
 	key = datastore.NewKey("/map/" + hash)
-	// set to the *original, non-byte* value
 	m[key] = data
 	return
 }
@@ -34,7 +33,6 @@ func (m MapStore) Get(key datastore.Key) (value []byte, err error) {
 	if m[key] == nil {
 		return nil, datastore.ErrNotFound
 	}
-
 	return m[key], nil
 }
 
@@ -50,31 +48,11 @@ func (m MapStore) Delete(key datastore.Key) error {
 	return nil
 }
 
-// TODO - this will have to place nice with IPFS block hashing strategies
-func hashBytes(data []byte) (hash string, err error) {
-	h := sha256.New()
-
-	if _, err = h.Write(data); err != nil {
-		return
-	}
-
-	mhBuf, err := multihash.Encode(h.Sum(nil), multihash.SHA2_256)
-	if err != nil {
-		return
-	}
-
-	hash = base58.Encode(mhBuf)
-	return
-}
-
 func (m MapStore) NewAdder(pin, wrap bool) (Adder, error) {
 	addedOut := make(chan AddedFile, 8)
-	done := make(chan bool, 0)
-
 	return &adder{
 		mapstore: m,
 		out:      addedOut,
-		done:     done,
 	}, nil
 }
 
@@ -83,7 +61,6 @@ func (m MapStore) NewAdder(pin, wrap bool) (Adder, error) {
 type adder struct {
 	mapstore MapStore
 	out      chan AddedFile
-	done     chan bool
 }
 
 func (a *adder) AddFile(f files.File) error {
@@ -105,10 +82,10 @@ func (a *adder) AddFile(f files.File) error {
 			return err
 		}
 
-		key := datastore.NewKey("/map/" + hash)
-		// set to the *original, non-byte* value
-		a.mapstore[key] = data
+		path := datastore.NewKey("/map/" + hash)
+		a.mapstore[path] = data
 		a.out <- AddedFile{
+			Path:  path,
 			Name:  f.FileName(),
 			Bytes: int64(len(data)),
 			Hash:  hash,
@@ -122,6 +99,19 @@ func (a *adder) Added() chan AddedFile {
 	return a.out
 }
 func (a *adder) Close() error {
-	a.done <- true
+	close(a.out)
 	return nil
+}
+
+func hashBytes(data []byte) (hash string, err error) {
+	h := sha256.New()
+	if _, err = h.Write(data); err != nil {
+		return
+	}
+	mhBuf, err := multihash.Encode(h.Sum(nil), multihash.SHA2_256)
+	if err != nil {
+		return
+	}
+	hash = base58.Encode(mhBuf)
+	return
 }

@@ -164,6 +164,7 @@ func (ds *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 					if len(output.Hash) > 0 {
 						// fmt.Println(output.Name, output.Size, output.Bytes, output.Hash)
 						added <- cafs.AddedFile{
+							Path:  datastore.NewKey("/ipfs/" + output.Hash),
 							Name:  output.Name,
 							Hash:  output.Hash,
 							Bytes: output.Bytes,
@@ -254,6 +255,7 @@ func (ds *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
 	dagserv := dag.NewDAGService(bserv)
 
 	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
+	fileAdder.Pin = pin
 	if err != nil {
 		return
 	}
@@ -282,15 +284,11 @@ func (ds *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
 	if err = fileAdder.AddFile(rfile); err != nil {
 		return
 	}
-
 	if _, err = fileAdder.Finalize(); err != nil {
 		return
 	}
-
-	if pin {
-		if err = fileAdder.PinRoot(); err != nil {
-			return
-		}
+	if err = fileAdder.PinRoot(); err != nil {
+		return
 	}
 
 	for {
