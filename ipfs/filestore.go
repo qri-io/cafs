@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/qri-io/cafs"
+	"github.com/qri-io/cafs/memfile"
 
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
-	relds "github.com/ipfs/go-datastore"
+	datastore "github.com/ipfs/go-datastore"
 	blockservice "github.com/ipfs/go-ipfs/blockservice"
 	files "github.com/ipfs/go-ipfs/commands/files"
 	core "github.com/ipfs/go-ipfs/core"
@@ -52,28 +53,33 @@ func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 	}, nil
 }
 
-func (ds *Filestore) Has(key relds.Key) (exists bool, err error) {
+func (ds *Filestore) Has(key datastore.Key) (exists bool, err error) {
 	return false, fmt.Errorf("has is unsupported")
 }
 
-func (ds *Filestore) Get(key relds.Key) ([]byte, error) {
+func (ds *Filestore) Get(key datastore.Key) (files.File, error) {
 	return ds.getKey(key)
 }
 
-func (ds *Filestore) Put(data []byte, pin bool) (key relds.Key, err error) {
+func (ds *Filestore) Put(file files.File, pin bool) (key datastore.Key, err error) {
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return datastore.NewKey(""), err
+	}
+
 	hash, err := ds.AddBytes(data, pin)
 	if err != nil {
-		return relds.NewKey(""), err
+		return datastore.NewKey(""), err
 	}
-	return relds.NewKey("/ipfs/" + hash), nil
+	return datastore.NewKey("/ipfs/" + hash), nil
 }
 
-func (ds *Filestore) Delete(relds.Key) error {
+func (ds *Filestore) Delete(datastore.Key) error {
 	// TODO
 	return fmt.Errorf("delete is unsupported")
 }
 
-func (ds *Filestore) getKey(key relds.Key) ([]byte, error) {
+func (ds *Filestore) getKey(key datastore.Key) (files.File, error) {
 	p := path.Path(key.String())
 	node := ds.node
 	dn, err := core.Resolve(node.Context(), node.Namesys, node.Resolver, p)
@@ -113,7 +119,13 @@ func (ds *Filestore) getKey(key relds.Key) ([]byte, error) {
 		return nil, err
 	}
 
-	return ioutil.ReadFile(fp)
+	f, err := os.Open(fp)
+	if err != nil {
+		return nil, err
+	}
+
+	// rf := files.NewReaderFile(key.String(), p.String(), f, 0777)
+	return memfile.NewMemfileReader(key.String(), f), nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface

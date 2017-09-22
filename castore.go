@@ -19,7 +19,7 @@ type Filestore interface {
 	// Put(file files.File, options map[string]interface{}) (key datastore.Key, err error)
 	// The most notable difference from a standard file store is the store itself determines
 	// the resulting key (google "content addressing" for more info ;)
-	Put(value []byte, pin bool) (key datastore.Key, err error)
+	Put(file files.File, pin bool) (key datastore.Key, err error)
 
 	// NewAdder should allocate an Adder instance for adding files to the filestore
 	// Adder gives the highest degree of control over the file adding process at the
@@ -32,7 +32,7 @@ type Filestore interface {
 
 	// Get retrieves the object `value` named by `key`.
 	// Get will return ErrNotFound if the key is not mapped to a value.
-	Get(key datastore.Key) (data []byte, err error)
+	Get(key datastore.Key) (file files.File, err error)
 
 	// Has returns whether the `key` is mapped to a `value`.
 	// In some contexts, it may be much cheaper only to check for existence of

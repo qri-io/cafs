@@ -5,21 +5,27 @@ import (
 	"fmt"
 	"github.com/ipfs/go-datastore"
 	"github.com/qri-io/cafs/memfile"
+	"io/ioutil"
 )
 
 func RunFilestoreTests(f Filestore) error {
-	value := []byte("foo")
-	key, err := f.Put(value, false)
+	fdata := []byte("foo")
+	file := memfile.NewMemfileBytes("file.txt", fdata)
+	key, err := f.Put(file, false)
 	if err != nil {
-		return fmt.Errorf("Filestore.Put(%s) error: %s", string(value), err.Error())
+		return fmt.Errorf("Filestore.Put(%s) error: %s", file.FileName(), err.Error())
 	}
 
-	data, err := f.Get(key)
+	outf, err := f.Get(key)
 	if err != nil {
 		return fmt.Errorf("Filestore.Get(%s) error: %s", key.String(), err.Error())
 	}
-	if !bytes.Equal(value, data) {
-		return fmt.Errorf("mismatched return value from get: %s != %s", string(value), string(data))
+	data, err := ioutil.ReadAll(outf)
+	if err != nil {
+		return fmt.Errorf("error reading data from returned file: %s", err.Error())
+	}
+	if !bytes.Equal(fdata, data) {
+		return fmt.Errorf("mismatched return value from get: %s != %s", outf.FileName(), string(data))
 	}
 
 	has, err := f.Has(datastore.NewKey("----------no-match---------"))

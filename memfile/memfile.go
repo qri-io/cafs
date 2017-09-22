@@ -43,6 +43,14 @@ type Memfile struct {
 // Confirm that Memfile satisfies the files.File interface
 var _ = (files.File)(&Memfile{})
 
+// NewMemfileBytes creates a file from an io.Reader
+func NewMemfileReader(name string, r io.Reader) *Memfile {
+	return &Memfile{
+		buf:  r,
+		name: name,
+	}
+}
+
 // NewMemfileBytes creates a file from a byte slice
 func NewMemfileBytes(name string, data []byte) *Memfile {
 	return &Memfile{

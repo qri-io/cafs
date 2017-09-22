@@ -7,7 +7,7 @@ import (
 	"github.com/jbenet/go-base58"
 	"github.com/multiformats/go-multihash"
 	"io"
-	"io/ioutil"
+	"math/rand"
 )
 
 func NewMapstore() Filestore {
@@ -16,20 +16,23 @@ func NewMapstore() Filestore {
 
 // MapStore implements Filestore in-memory as a map. This thing needs attention.
 // TODO - fixme
-type MapStore map[datastore.Key][]byte
+type MapStore map[datastore.Key]files.File
 
-func (m MapStore) Put(data []byte, pin bool) (key datastore.Key, err error) {
-	hash, err := hashBytes(data)
+func (m MapStore) Put(file files.File, pin bool) (key datastore.Key, err error) {
+	// shhhhhh, this is a cheap hack for content-addressing
+	// hash, err := hashBytes(data)
+
+	hash, err := hashBytes(randBytes(40))
 	if err != nil {
 		return
 	}
 
 	key = datastore.NewKey("/map/" + hash)
-	m[key] = data
+	m[key] = file
 	return
 }
 
-func (m MapStore) Get(key datastore.Key) (value []byte, err error) {
+func (m MapStore) Get(key datastore.Key) (files.File, error) {
 	if m[key] == nil {
 		return nil, datastore.ErrNotFound
 	}
@@ -56,7 +59,6 @@ func (m MapStore) NewAdder(pin, wrap bool) (Adder, error) {
 	}, nil
 }
 
-// TODO - FINISH. THIS IMPLEMENTATION DOESN'T WORK.
 // Adder wraps a coreunix adder to conform to the cafs adder interface
 type adder struct {
 	mapstore MapStore
@@ -73,21 +75,26 @@ func (a *adder) AddFile(f files.File) error {
 			a.AddFile(file)
 		}
 	} else {
-		data, err := ioutil.ReadAll(f)
-		if err != nil {
-			return err
-		}
-		hash, err := hashBytes(data)
+		// data, err := ioutil.ReadAll(f)
+		// if err != nil {
+		// 	return err
+		// }
+		// hash, err := hashBytes(data)
+		// if err != nil {
+		// 	return err
+		// }
+
+		hash, err := hashBytes(randBytes(40))
 		if err != nil {
 			return err
 		}
 
 		path := datastore.NewKey("/map/" + hash)
-		a.mapstore[path] = data
+		a.mapstore[path] = f
 		a.out <- AddedFile{
 			Path:  path,
 			Name:  f.FileName(),
-			Bytes: int64(len(data)),
+			Bytes: 0,
 			Hash:  hash,
 		}
 	}
@@ -114,4 +121,14 @@ func hashBytes(data []byte) (hash string, err error) {
 	}
 	hash = base58.Encode(mhBuf)
 	return
+}
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+func randBytes(n int) []byte {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+	}
+	return b
 }
