@@ -1,27 +1,31 @@
-package castore
+package cafs
 
 import (
 	"crypto/sha256"
 	"github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-ipfs/commands/files"
 	"github.com/jbenet/go-base58"
 	"github.com/multiformats/go-multihash"
+	"io"
+	"io/ioutil"
 )
 
-func NewMapstore() Datastore {
+func NewMapstore() Filestore {
 	return MapStore{}
 }
 
-// MapStore implements castore in-memory as a map
+// MapStore implements Filestore in-memory as a map. This thing needs attention.
+// TODO - fixme
 type MapStore map[datastore.Key][]byte
 
-func (m MapStore) Put(data []byte) (key datastore.Key, err error) {
+func (m MapStore) Put(data []byte, pin bool) (key datastore.Key, err error) {
 	hash, err := hashBytes(data)
 	if err != nil {
 		return
 	}
 
 	key = datastore.NewKey("/map/" + hash)
-	// set to the *original* value
+	// set to the *original, non-byte* value
 	m[key] = data
 	return
 }
@@ -61,4 +65,63 @@ func hashBytes(data []byte) (hash string, err error) {
 
 	hash = base58.Encode(mhBuf)
 	return
+}
+
+func (m MapStore) NewAdder(pin, wrap bool) (Adder, error) {
+	addedOut := make(chan AddedFile, 8)
+	done := make(chan bool, 0)
+
+	return &adder{
+		mapstore: m,
+		out:      addedOut,
+		done:     done,
+	}, nil
+}
+
+// TODO - FINISH. THIS IMPLEMENTATION DOESN'T WORK.
+// Adder wraps a coreunix adder to conform to the cafs adder interface
+type adder struct {
+	mapstore MapStore
+	out      chan AddedFile
+	done     chan bool
+}
+
+func (a *adder) AddFile(f files.File) error {
+	if f.IsDirectory() {
+		for {
+			file, err := f.NextFile()
+			if err == io.EOF {
+				return nil
+			}
+			a.AddFile(file)
+		}
+	} else {
+		data, err := ioutil.ReadAll(f)
+		if err != nil {
+			return err
+		}
+		hash, err := hashBytes(data)
+		if err != nil {
+			return err
+		}
+
+		key := datastore.NewKey("/map/" + hash)
+		// set to the *original, non-byte* value
+		a.mapstore[key] = data
+		a.out <- AddedFile{
+			Name:  f.FileName(),
+			Bytes: int64(len(data)),
+			Hash:  hash,
+		}
+	}
+
+	return nil
+}
+
+func (a *adder) Added() chan AddedFile {
+	return a.out
+}
+func (a *adder) Close() error {
+	a.done <- true
+	return nil
 }

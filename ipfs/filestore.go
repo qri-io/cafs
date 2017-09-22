@@ -3,43 +3,37 @@ package ipfs_datastore
 import (
 	"context"
 	"fmt"
-	// "io"
+	"github.com/qri-io/cafs"
+
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
 
-	// bstore "github.com/ipfs/go-ipfs/blocks/blockstore"
+	relds "github.com/ipfs/go-datastore"
 	blockservice "github.com/ipfs/go-ipfs/blockservice"
-	"github.com/ipfs/go-ipfs/core"
-	"github.com/ipfs/go-ipfs/core/coreunix"
-	dag "github.com/ipfs/go-ipfs/merkledag"
-	// dagtest "github.com/ipfs/go-ipfs/merkledag/test"
 	files "github.com/ipfs/go-ipfs/commands/files"
+	core "github.com/ipfs/go-ipfs/core"
+	coreunix "github.com/ipfs/go-ipfs/core/coreunix"
+	dag "github.com/ipfs/go-ipfs/merkledag"
 	path "github.com/ipfs/go-ipfs/path"
-	// repo "github.com/ipfs/go-ipfs/repo"
-	// fsrepo "github.com/ipfs/go-ipfs/repo/fsrepo"
 	tar "github.com/ipfs/go-ipfs/thirdparty/tar"
 	uarchive "github.com/ipfs/go-ipfs/unixfs/archive"
-
-	relds "github.com/ipfs/go-datastore"
-	relquery "github.com/ipfs/go-datastore/query"
-	// "gx/ipfs/QmVSase1JP7cq9QkPT46oNwdp9pT6kBkG3oqS14y3QcZjG/go-datastore"
 )
 
-type Datastore struct {
+type Filestore struct {
 	// networkless ipfs node
 	node *core.IpfsNode
 }
 
-func NewDatastore(config ...func(cfg *StoreCfg)) (*Datastore, error) {
+func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 	cfg := DefaultConfig()
 	for _, c := range config {
 		c(cfg)
 	}
 
 	if cfg.Node != nil {
-		return &Datastore{
+		return &Filestore{
 			node: cfg.Node,
 		}, nil
 	}
@@ -53,40 +47,33 @@ func NewDatastore(config ...func(cfg *StoreCfg)) (*Datastore, error) {
 		return nil, fmt.Errorf("error creating networkless ipfs node: %s\n", err.Error())
 	}
 
-	return &Datastore{
+	return &Filestore{
 		node: node,
 	}, nil
 }
 
-func (ds *Datastore) Has(key relds.Key) (exists bool, err error) {
+func (ds *Filestore) Has(key relds.Key) (exists bool, err error) {
 	return false, fmt.Errorf("has is unsupported")
 }
 
-func (ds *Datastore) Get(key relds.Key) ([]byte, error) {
+func (ds *Filestore) Get(key relds.Key) ([]byte, error) {
 	return ds.getKey(key)
 }
 
-func (ds *Datastore) Put(data []byte) (key relds.Key, err error) {
-	hash, err := ds.AddAndPinBytes(data)
+func (ds *Filestore) Put(data []byte, pin bool) (key relds.Key, err error) {
+	hash, err := ds.AddBytes(data, pin)
 	if err != nil {
 		return relds.NewKey(""), err
 	}
 	return relds.NewKey("/ipfs/" + hash), nil
 }
 
-func (ds *Datastore) Delete(relds.Key) error {
+func (ds *Filestore) Delete(relds.Key) error {
+	// TODO
 	return fmt.Errorf("delete is unsupported")
 }
 
-func (ds *Datastore) Query(q relquery.Query) (relquery.Results, error) {
-	return nil, fmt.Errorf("query is unsupported")
-}
-
-func (ds *Datastore) Batch() (relds.Batch, error) {
-	return nil, relds.ErrBatchUnsupported
-}
-
-func (ds *Datastore) getKey(key relds.Key) ([]byte, error) {
+func (ds *Filestore) getKey(key relds.Key) ([]byte, error) {
 	p := path.Path(key.String())
 	node := ds.node
 	dn, err := core.Resolve(node.Context(), node.Namesys, node.Resolver, p)
@@ -129,7 +116,79 @@ func (ds *Datastore) getKey(key relds.Key) ([]byte, error) {
 	return ioutil.ReadFile(fp)
 }
 
-func (ds *Datastore) AddAndPinPath(path string) (hash string, err error) {
+// Adder wraps a coreunix adder to conform to the cafs adder interface
+type Adder struct {
+	adder *coreunix.Adder
+	out   chan interface{}
+	added chan cafs.AddedFile
+}
+
+func (a *Adder) AddFile(f files.File) error {
+	return a.adder.AddFile(f)
+}
+func (a *Adder) Added() chan cafs.AddedFile {
+	return a.added
+}
+
+func (a *Adder) Close() error {
+	defer close(a.out)
+	if _, err := a.adder.Finalize(); err != nil {
+		return err
+	}
+	return a.adder.PinRoot()
+}
+
+func (ds *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
+	node := ds.node
+	ctx := context.Background()
+	bserv := blockservice.New(node.Blockstore, node.Exchange)
+	dagserv := dag.NewDAGService(bserv)
+
+	a, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
+	if err != nil {
+		return nil, err
+	}
+
+	outChan := make(chan interface{}, 8)
+	added := make(chan cafs.AddedFile, 8)
+	a.Out = outChan
+	a.Pin = pin
+	a.Wrap = wrap
+
+	go func() {
+		for {
+			select {
+			case out, ok := <-outChan:
+				if ok {
+					output := out.(*coreunix.AddedObject)
+					if len(output.Hash) > 0 {
+						// fmt.Println(output.Name, output.Size, output.Bytes, output.Hash)
+						added <- cafs.AddedFile{
+							Name:  output.Name,
+							Hash:  output.Hash,
+							Bytes: output.Bytes,
+							Size:  output.Size,
+						}
+					}
+				} else {
+					close(added)
+					return
+				}
+			case <-ctx.Done():
+				close(added)
+				return
+			}
+		}
+	}()
+
+	return &Adder{
+		adder: a,
+		out:   outChan,
+		added: added,
+	}, nil
+}
+
+func (ds *Filestore) AddPath(path string, pin bool) (hash string, err error) {
 	node := ds.node
 
 	ctx := context.Background()
@@ -155,7 +214,6 @@ func (ds *Datastore) AddAndPinPath(path string) (hash string, err error) {
 	defer close(outChan)
 
 	fileAdder.Out = outChan
-
 	if err = fileAdder.AddFile(rfile); err != nil {
 		return
 	}
@@ -164,8 +222,10 @@ func (ds *Datastore) AddAndPinPath(path string) (hash string, err error) {
 		return
 	}
 
-	if err = fileAdder.PinRoot(); err != nil {
-		return
+	if pin {
+		if err = fileAdder.PinRoot(); err != nil {
+			return
+		}
 	}
 
 	for {
@@ -186,7 +246,7 @@ func (ds *Datastore) AddAndPinPath(path string) (hash string, err error) {
 }
 
 // AddAndPinBytes adds a file to the top level IPFS Node
-func (ds *Datastore) AddAndPinBytes(data []byte) (hash string, err error) {
+func (ds *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
 	node := ds.node
 
 	ctx := context.Background()
@@ -227,8 +287,10 @@ func (ds *Datastore) AddAndPinBytes(data []byte) (hash string, err error) {
 		return
 	}
 
-	if err = fileAdder.PinRoot(); err != nil {
-		return
+	if pin {
+		if err = fileAdder.PinRoot(); err != nil {
+			return
+		}
 	}
 
 	for {
