@@ -10,6 +10,7 @@ import (
 	"math/rand"
 )
 
+// NewMamstore allocates an instance of a mapstore
 func NewMapstore() Filestore {
 	return MapStore{}
 }
