@@ -1,8 +1,8 @@
-package memfile
+package memfs
 
 import (
 	"github.com/ipfs/go-ipfs/commands/files"
-	"io"
+	"github.com/qri-io/cafs"
 	"testing"
 )
 
@@ -32,7 +32,7 @@ func TestMemfile(t *testing.T) {
 	}
 
 	paths := []string{}
-	err := Walk(a, func(f files.File) error {
+	err := cafs.Walk(a, 0, func(f files.File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})
@@ -50,26 +50,4 @@ func TestMemfile(t *testing.T) {
 			t.Errorf("path %d mismatch expected: %s, got: %s", i, p, paths[i])
 		}
 	}
-}
-
-func Walk(root files.File, visit func(f files.File) error) (err error) {
-	if err := visit(root); err != nil {
-		return err
-	}
-
-	if root.IsDirectory() {
-		for {
-			f, err := root.NextFile()
-			if err == io.EOF {
-				break
-			} else if err != nil {
-				return err
-			}
-
-			if err := Walk(f, visit); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }

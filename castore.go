@@ -6,8 +6,13 @@
 package cafs
 
 import (
+	"fmt"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-ipfs/commands/files"
+)
+
+var (
+	ErrNotFound = fmt.Errorf("cafs: Not Found")
 )
 
 // Filestore is an interface for working with a content-addressed file system.
@@ -77,4 +82,29 @@ type AddedFile struct {
 	Bytes int64
 	Hash  string
 	Size  string
+}
+
+// Walk traverses a file tree calling visit on each node
+func Walk(root files.File, depth int, visit func(f files.File, depth int) error) (err error) {
+	if err := visit(root, depth); err != nil {
+		return err
+	}
+
+	if root.IsDirectory() {
+		for {
+			f, err := root.NextFile()
+			if err != nil {
+				if err.Error() == "EOF" {
+					break
+				} else {
+					return err
+				}
+			}
+
+			if err := Walk(f, depth+1, visit); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -19,7 +19,7 @@
 // degree of modularity for our purposes:
 // * memdir: github.com/ipfs/go-ipfs/commands/files.SerialFile
 // * memfile: github.com/ipfs/go-ipfs/commands/files.ReaderFile
-package memfile
+package memfs
 
 import (
 	"bytes"
@@ -133,6 +133,7 @@ func (Memdir) IsDirectory() bool {
 
 func (d *Memdir) NextFile() (files.File, error) {
 	if d.fi >= len(d.children) {
+		d.fi = 0
 		return nil, io.EOF
 	}
 	defer func() { d.fi++ }()
