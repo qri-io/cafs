@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/qri-io/cafs"
-	"github.com/qri-io/cafs/memfile"
+	"github.com/qri-io/cafs/memfs"
 
 	"io/ioutil"
 	"os"
@@ -125,7 +125,7 @@ func (ds *Filestore) getKey(key datastore.Key) (files.File, error) {
 	}
 
 	// rf := files.NewReaderFile(key.String(), p.String(), f, 0777)
-	return memfile.NewMemfileReader(key.String(), f), nil
+	return memfs.NewMemfileReader(key.String(), f), nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface

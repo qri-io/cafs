@@ -1,4 +1,4 @@
-// memfile satsfies the ipfs files.File interface in memory
+// memfs satsfies the ipfs files.File interface in memory
 // An example pulled from tests will create a tree of "files"
 // with directories & files, with paths properly set:
 // NewMemdir("/a",
@@ -18,7 +18,7 @@
 // and might not be necessary in most situations, but provides a sensible
 // degree of modularity for our purposes:
 // * memdir: github.com/ipfs/go-ipfs/commands/files.SerialFile
-// * memfile: github.com/ipfs/go-ipfs/commands/files.ReaderFile
+// * memfs: github.com/ipfs/go-ipfs/commands/files.ReaderFile
 package memfs
 
 import (
