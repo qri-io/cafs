@@ -1,4 +1,4 @@
-package ipfs_datastore
+package ipfs_filestore
 
 import (
 	"context"

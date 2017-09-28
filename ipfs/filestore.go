@@ -1,4 +1,4 @@
-package ipfs_datastore
+package ipfs_filestore
 
 import (
 	"context"
@@ -29,8 +29,8 @@ type Filestore struct {
 
 func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 	cfg := DefaultConfig()
-	for _, c := range config {
-		c(cfg)
+	for _, option := range config {
+		option(cfg)
 	}
 
 	if cfg.Node != nil {
@@ -45,12 +45,16 @@ func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 
 	node, err := core.NewNode(cfg.Ctx, &cfg.BuildCfg)
 	if err != nil {
-		return nil, fmt.Errorf("error creating networkless ipfs node: %s\n", err.Error())
+		return nil, fmt.Errorf("error creating ipfs node: %s\n", err.Error())
 	}
 
 	return &Filestore{
 		node: node,
 	}, nil
+}
+
+func (fs *Filestore) Node() *core.IpfsNode {
+	return fs.node
 }
 
 func (ds *Filestore) Has(key datastore.Key) (exists bool, err error) {
