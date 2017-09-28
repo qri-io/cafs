@@ -3,6 +3,7 @@ package ipfs_datastore
 import (
 	"context"
 	"fmt"
+	"github.com/ipfs/go-ipfs/core/corerepo"
 	"github.com/qri-io/cafs"
 	"github.com/qri-io/cafs/memfs"
 
@@ -23,7 +24,6 @@ import (
 )
 
 type Filestore struct {
-	// networkless ipfs node
 	node *core.IpfsNode
 }
 
@@ -74,9 +74,9 @@ func (ds *Filestore) Put(file files.File, pin bool) (key datastore.Key, err erro
 	return datastore.NewKey("/ipfs/" + hash), nil
 }
 
-func (ds *Filestore) Delete(datastore.Key) error {
-	// TODO
-	return fmt.Errorf("delete is unsupported")
+func (fs *Filestore) Delete(path datastore.Key) error {
+	// TODO - formally remove files?
+	return fs.Unpin(path, true)
 }
 
 func (ds *Filestore) getKey(key datastore.Key) (files.File, error) {
@@ -318,4 +318,14 @@ func (ds *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
 
 	err = fmt.Errorf("something's gone horribly wrong")
 	return
+}
+
+func (fs *Filestore) Pin(path datastore.Key, recursive bool) error {
+	_, err := corerepo.Pin(fs.node, fs.node.Context(), []string{path.String()}, recursive)
+	return err
+}
+
+func (fs *Filestore) Unpin(path datastore.Key, recursive bool) error {
+	_, err := corerepo.Unpin(fs.node, fs.node.Context(), []string{path.String()}, recursive)
+	return err
 }

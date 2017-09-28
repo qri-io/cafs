@@ -26,15 +26,6 @@ type Filestore interface {
 	// the resulting key (google "content addressing" for more info ;)
 	Put(file files.File, pin bool) (key datastore.Key, err error)
 
-	// NewAdder should allocate an Adder instance for adding files to the filestore
-	// Adder gives the highest degree of control over the file adding process at the
-	// cost of being harder to work with.
-	// "pin" is a flag for recursively pinning this object
-	// "wrap" sets weather the top level should be wrapped in a directory
-	// expect this to change to something like:
-	// NewAdder(opt map[string]interface{}) (Adder, error)
-	NewAdder(pin, wrap bool) (Adder, error)
-
 	// Get retrieves the object `value` named by `key`.
 	// Get will return ErrNotFound if the key is not mapped to a value.
 	Get(key datastore.Key) (file files.File, err error)
@@ -47,6 +38,15 @@ type Filestore interface {
 
 	// Delete removes the value for given `key`.
 	Delete(key datastore.Key) error
+
+	// NewAdder allocates an Adder instance for adding files to the filestore
+	// Adder gives the highest degree of control over the file adding process at the
+	// cost of being harder to work with.
+	// "pin" is a flag for recursively pinning this object
+	// "wrap" sets weather the top level should be wrapped in a directory
+	// expect this to change to something like:
+	// NewAdder(opt map[string]interface{}) (Adder, error)
+	NewAdder(pin, wrap bool) (Adder, error)
 }
 
 // TODO - This is an in-progress interface upgrade for content stores that support
