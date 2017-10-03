@@ -3,13 +3,14 @@ package memfs
 import (
 	"bytes"
 	"crypto/sha256"
+	"io/ioutil"
+	"strings"
+
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-ipfs/commands/files"
 	"github.com/jbenet/go-base58"
 	"github.com/multiformats/go-multihash"
 	"github.com/qri-io/cafs"
-	"io/ioutil"
-	"strings"
 )
 
 // NewMamstore allocates an instance of a mapstore

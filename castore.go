@@ -7,6 +7,7 @@ package cafs
 
 import (
 	"fmt"
+
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-ipfs/commands/files"
 )
@@ -40,7 +41,7 @@ type Filestore interface {
 	Delete(key datastore.Key) error
 
 	// NewAdder allocates an Adder instance for adding files to the filestore
-	// Adder gives the highest degree of control over the file adding process at the
+	// Adder gives a higher degree of control over the file adding process at the
 	// cost of being harder to work with.
 	// "pin" is a flag for recursively pinning this object
 	// "wrap" sets weather the top level should be wrapped in a directory
@@ -49,9 +50,33 @@ type Filestore interface {
 	NewAdder(pin, wrap bool) (Adder, error)
 }
 
-// TODO - This is an in-progress interface upgrade for content stores that support
+// Fetcher is the interface for getting files from a remote source
+// filestores can opt into the fetcher interface
+type Fetcher interface {
+	// Fetch gets a file from a source
+	Fetch(source Source, key datastore.Key) (files.SizeFile, error)
+}
+
+// Source identifies where a file should come from.
+// examples of different sources could be an HTTP url or P2P node Identifier
+type Source interface {
+	// address should return the base resource identifier in either content
+	// or location based addressing schemes
+	Address() string
+}
+
+// source is an internal implementation of the Source interface
+type source string
+
+func (s source) Address() string { return string(s) }
+
+var (
+	// SourceAny specifies that content can come from anywhere
+	SourceAny = source("any")
+)
+
+// Pinner interface for content stores that support
 // the concept of pinning (originated by IPFS).
-// *currently not in use, and not implemented by anyone, ever*
 type Pinner interface {
 	Pin(key datastore.Key, recursive bool) error
 	Unpin(key datastore.Key, recursive bool) error
