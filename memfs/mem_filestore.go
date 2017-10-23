@@ -3,6 +3,7 @@ package memfs
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"io/ioutil"
 	"strings"
 
@@ -50,7 +51,7 @@ func (m MapStore) Put(file files.File, pin bool) (key datastore.Key, err error) 
 				if e.Error() == "EOF" {
 					dirhash, e := hashBytes(buf.Bytes())
 					if err != nil {
-						err = e
+						err = fmt.Errorf("error hashing file data: %s", e.Error())
 						return
 					}
 					// fmt.Println("dirhash:", dirhash)
@@ -59,19 +60,20 @@ func (m MapStore) Put(file files.File, pin bool) (key datastore.Key, err error) 
 					return
 
 				}
-				err = e
+				err = fmt.Errorf("error getting next file: %s", err.Error())
 				return
 			}
 
 			hash, e := m.Put(f, pin)
 			if e != nil {
-				err = e
+				err = fmt.Errorf("error putting file: %s", e.Error())
 				return
 			}
 			key = hash
 			dir.files = append(dir.files, hash)
 			_, err = buf.WriteString(key.String() + "\n")
 			if err != nil {
+				err = fmt.Errorf("error writing to buffer: %s", err.Error())
 				return
 			}
 		}
@@ -79,12 +81,12 @@ func (m MapStore) Put(file files.File, pin bool) (key datastore.Key, err error) 
 	} else {
 		data, e := ioutil.ReadAll(file)
 		if e != nil {
-			err = e
+			err = fmt.Errorf("error reading from file: %s", e.Error())
 			return
 		}
 		hash, e := hashBytes(data)
 		if e != nil {
-			err = e
+			err = fmt.Errorf("error hashing file data: %s", e.Error())
 			return
 		}
 		key = datastore.NewKey("/map/" + hash)
@@ -131,6 +133,7 @@ type adder struct {
 func (a *adder) AddFile(f files.File) error {
 	path, err := a.mapstore.Put(f, a.pin)
 	if err != nil {
+		fmt.Errorf("error putting file in mapstore: %s", err.Error())
 		return err
 	}
 	a.out <- cafs.AddedFile{
@@ -153,10 +156,12 @@ func (a *adder) Close() error {
 func hashBytes(data []byte) (hash string, err error) {
 	h := sha256.New()
 	if _, err = h.Write(data); err != nil {
+		err = fmt.Errorf("error writing hash data: %s", err.Error())
 		return
 	}
 	mhBuf, err := multihash.Encode(h.Sum(nil), multihash.SHA2_256)
 	if err != nil {
+		err = fmt.Errorf("error encoding hash: %s", err.Error())
 		return
 	}
 	hash = base58.Encode(mhBuf)

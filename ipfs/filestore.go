@@ -3,7 +3,6 @@ package ipfs_filestore
 import (
 	"context"
 	"fmt"
-
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -76,12 +75,14 @@ func (fs *Filestore) Fetch(source cafs.Source, key datastore.Key) (files.File, e
 func (fs *Filestore) Put(file files.File, pin bool) (key datastore.Key, err error) {
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
-		return datastore.NewKey(""), err
+		err = fmt.Errorf("error reading contents of file: %s", err.Error())
+		return
 	}
 
 	hash, err := fs.AddBytes(data, pin)
 	if err != nil {
-		return datastore.NewKey(""), err
+		err = fmt.Errorf("error adding bytes: %s", err.Error())
+		return
 	}
 	return datastore.NewKey("/ipfs/" + hash), nil
 }
@@ -100,31 +101,15 @@ func (fs *Filestore) getKey(key datastore.Key) (files.File, error) {
 	// a hash if it's online, which is a behaviour we need control over
 	// might be worth expanding the cafs interface with the concept of
 	// remote gets
+	// update 2017-10-23 - we now have a fetch interface, integrate? is it integrated?
 	dn, err := core.Resolve(node.Context(), node.Namesys, node.Resolver, p)
 	if err != nil {
-		fmt.Println("resolver error")
-		return nil, err
+		return nil, fmt.Errorf("error resolving hash: %s", err.Error())
 	}
-
-	// fmt.Println()
-	// switch dn := dn.(type) {
-	//   case *dag.ProtoNode:
-	//     size, err := dn.Size()
-	//     if err != nil {
-	//       res.SetError(err, cmds.ErrNormal)
-	//       return
-	//     }
-	//     res.SetLength(size)
-	//   case *dag.RawNode:
-	//     res.SetLength(uint64(len(dn.RawData())))
-	//   default:
-	//     res.SetError(fmt.Errorf("'ipfs get' only supports unixfs nodes"), cmds.ErrNormal)
-	//     return
-	//   }
 
 	rdr, err := uarchive.DagArchive(node.Context(), dn, p.String(), node.DAG, false, 0)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unarchiving DAG: %s", err.Error())
 	}
 
 	fp := filepath.Join("/tmp", key.BaseNamespace())
@@ -134,12 +119,12 @@ func (fs *Filestore) getKey(key datastore.Key) (files.File, error) {
 		Progress: func(int64) int64 { return 0 },
 	}
 	if err := e.Extract(rdr); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error extracting from tar reader: %s", err.Error())
 	}
 
 	f, err := os.Open(fp)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error opening file: %s", err.Error())
 	}
 
 	return memfs.NewMemfileReader(key.String(), f), nil
@@ -175,7 +160,7 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 
 	a, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error allocating adder: %s", err.Error())
 	}
 
 	outChan := make(chan interface{}, 8)
@@ -227,16 +212,19 @@ func (fs *Filestore) AddPath(path string, pin bool) (hash string, err error) {
 
 	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
 	if err != nil {
+		err = fmt.Errorf("error creating new adder: %s", err.Error())
 		return
 	}
 
 	fi, err := os.Stat(path)
 	if err != nil {
+		err = fmt.Errorf("error getting file stats: %s", err.Error())
 		return
 	}
 
 	rfile, err := files.NewSerialFile("", path, false, fi)
 	if err != nil {
+		err = fmt.Errorf("error creating new serial file: %s", err.Error())
 		return
 	}
 
@@ -245,15 +233,18 @@ func (fs *Filestore) AddPath(path string, pin bool) (hash string, err error) {
 
 	fileAdder.Out = outChan
 	if err = fileAdder.AddFile(rfile); err != nil {
+		err = fmt.Errorf("error adding file: %s", err.Error())
 		return
 	}
 
 	if _, err = fileAdder.Finalize(); err != nil {
+		err = fmt.Errorf("error finalizing file adding: %s", err.Error())
 		return
 	}
 
 	if pin {
 		if err = fileAdder.PinRoot(); err != nil {
+			err = fmt.Errorf("error pinning root file: %s", err.Error())
 			return
 		}
 	}
@@ -286,22 +277,26 @@ func (fs *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
 	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
 	fileAdder.Pin = pin
 	if err != nil {
+		err = fmt.Errorf("error allocating adder: %s", err.Error())
 		return
 	}
 
 	path := filepath.Join("/tmp", time.Now().String())
 
 	if err = ioutil.WriteFile(path, data, os.ModePerm); err != nil {
+		err = fmt.Errorf("error writing file: %s", err.Error())
 		return
 	}
 
 	fi, err := os.Stat(path)
 	if err != nil {
+		err = fmt.Errorf("error getting file stats: %s", err.Error())
 		return
 	}
 
 	rfile, err := files.NewSerialFile("", path, false, fi)
 	if err != nil {
+		err = fmt.Errorf("error creating serial file: %s", err.Error())
 		return
 	}
 
@@ -311,12 +306,15 @@ func (fs *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
 	fileAdder.Out = outChan
 
 	if err = fileAdder.AddFile(rfile); err != nil {
+		err = fmt.Errorf("error adding file to adder: %s", err.Error())
 		return
 	}
 	if _, err = fileAdder.Finalize(); err != nil {
+		err = fmt.Errorf("error finalizing file adder: %s", err.Error())
 		return
 	}
 	if err = fileAdder.PinRoot(); err != nil {
+		err = fmt.Errorf("error pinning file root: %s", err.Error())
 		return
 	}
 
