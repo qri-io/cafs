@@ -9,6 +9,26 @@ itself determines keys.
 
 ## Usage
 
+```go
+var (
+	ErrNotFound = fmt.Errorf("cafs: Not Found")
+)
+```
+
+```go
+var (
+	// SourceAny specifies that content can come from anywhere
+	SourceAny = source("any")
+)
+```
+
+#### func  Walk
+
+```go
+func Walk(root files.File, depth int, visit func(f files.File, depth int) error) (err error)
+```
+Walk traverses a file tree calling visit on each node
+
 #### type AddedFile
 
 ```go
@@ -46,6 +66,18 @@ parallelized. Implementers must make all required AddFile calls, then call Close
 to finalize the addition process. Progress can be monitored through the Added()
 channel
 
+#### type Fetcher
+
+```go
+type Fetcher interface {
+	// Fetch gets a file from a source
+	Fetch(source Source, key datastore.Key) (files.SizeFile, error)
+}
+```
+
+Fetcher is the interface for getting files from a remote source filestores can
+opt into the fetcher interface
+
 #### type Filestore
 
 ```go
@@ -55,15 +87,6 @@ type Filestore interface {
 	// The most notable difference from a standard file store is the store itself determines
 	// the resulting key (google "content addressing" for more info ;)
 	Put(file files.File, pin bool) (key datastore.Key, err error)
-
-	// NewAdder should allocate an Adder instance for adding files to the filestore
-	// Adder gives the highest degree of control over the file adding process at the
-	// cost of being harder to work with.
-	// "pin" is a flag for recursively pinning this object
-	// "wrap" sets weather the top level should be wrapped in a directory
-	// expect this to change to something like:
-	// NewAdder(opt map[string]interface{}) (Adder, error)
-	NewAdder(pin, wrap bool) (Adder, error)
 
 	// Get retrieves the object `value` named by `key`.
 	// Get will return ErrNotFound if the key is not mapped to a value.
@@ -77,6 +100,15 @@ type Filestore interface {
 
 	// Delete removes the value for given `key`.
 	Delete(key datastore.Key) error
+
+	// NewAdder allocates an Adder instance for adding files to the filestore
+	// Adder gives a higher degree of control over the file adding process at the
+	// cost of being harder to work with.
+	// "pin" is a flag for recursively pinning this object
+	// "wrap" sets weather the top level should be wrapped in a directory
+	// expect this to change to something like:
+	// NewAdder(opt map[string]interface{}) (Adder, error)
+	NewAdder(pin, wrap bool) (Adder, error)
 }
 ```
 
@@ -84,51 +116,6 @@ Filestore is an interface for working with a content-addressed file system. This
 interface is under active development, expect it to change lots. It's currently
 form-fitting around IPFS (ipfs.io), with far-off plans to generalize toward
 compatibility with git (git-scm.com), then maybe other stuff, who knows.
-
-#### func  NewMapstore
-
-```go
-func NewMapstore() Filestore
-```
-
-#### type MapStore
-
-```go
-type MapStore map[datastore.Key]files.File
-```
-
-MapStore implements Filestore in-memory as a map. This thing needs attention.
-TODO - fixme
-
-#### func (MapStore) Delete
-
-```go
-func (m MapStore) Delete(key datastore.Key) error
-```
-
-#### func (MapStore) Get
-
-```go
-func (m MapStore) Get(key datastore.Key) (files.File, error)
-```
-
-#### func (MapStore) Has
-
-```go
-func (m MapStore) Has(key datastore.Key) (exists bool, err error)
-```
-
-#### func (MapStore) NewAdder
-
-```go
-func (m MapStore) NewAdder(pin, wrap bool) (Adder, error)
-```
-
-#### func (MapStore) Put
-
-```go
-func (m MapStore) Put(file files.File, pin bool) (key datastore.Key, err error)
-```
 
 #### type Pinner
 
@@ -139,6 +126,18 @@ type Pinner interface {
 }
 ```
 
-TODO - This is an in-progress interface upgrade for content stores that support
-the concept of pinning (originated by IPFS). *currently not in use, and not
-implemented by anyone, ever*
+Pinner interface for content stores that support the concept of pinning
+(originated by IPFS).
+
+#### type Source
+
+```go
+type Source interface {
+	// address should return the base resource identifier in either content
+	// or location based addressing schemes
+	Address() string
+}
+```
+
+Source identifies where a file should come from. examples of different sources
+could be an HTTP url or P2P node Identifier
