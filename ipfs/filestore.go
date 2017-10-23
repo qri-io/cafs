@@ -1,10 +1,8 @@
-package ipfs_datastore
+package ipfs_filestore
 
 import (
 	"context"
 	"fmt"
-	"github.com/qri-io/cafs"
-	"github.com/qri-io/cafs/memfs"
 
 	"io/ioutil"
 	"os"
@@ -15,22 +13,26 @@ import (
 	blockservice "github.com/ipfs/go-ipfs/blockservice"
 	files "github.com/ipfs/go-ipfs/commands/files"
 	core "github.com/ipfs/go-ipfs/core"
+	corerepo "github.com/ipfs/go-ipfs/core/corerepo"
 	coreunix "github.com/ipfs/go-ipfs/core/coreunix"
 	dag "github.com/ipfs/go-ipfs/merkledag"
 	path "github.com/ipfs/go-ipfs/path"
 	tar "github.com/ipfs/go-ipfs/thirdparty/tar"
 	uarchive "github.com/ipfs/go-ipfs/unixfs/archive"
+	cafs "github.com/qri-io/cafs"
+	memfs "github.com/qri-io/cafs/memfs"
+
+	ipfsds "gx/ipfs/QmVSase1JP7cq9QkPT46oNwdp9pT6kBkG3oqS14y3QcZjG/go-datastore"
 )
 
 type Filestore struct {
-	// networkless ipfs node
 	node *core.IpfsNode
 }
 
 func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 	cfg := DefaultConfig()
-	for _, c := range config {
-		c(cfg)
+	for _, option := range config {
+		option(cfg)
 	}
 
 	if cfg.Node != nil {
@@ -45,7 +47,7 @@ func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 
 	node, err := core.NewNode(cfg.Ctx, &cfg.BuildCfg)
 	if err != nil {
-		return nil, fmt.Errorf("error creating networkless ipfs node: %s\n", err.Error())
+		return nil, fmt.Errorf("error creating ipfs node: %s\n", err.Error())
 	}
 
 	return &Filestore{
@@ -53,41 +55,58 @@ func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 	}, nil
 }
 
-func (ds *Filestore) Has(key datastore.Key) (exists bool, err error) {
-	return false, fmt.Errorf("has is unsupported")
+func (fs *Filestore) Node() *core.IpfsNode {
+	return fs.node
 }
 
-func (ds *Filestore) Get(key datastore.Key) (files.File, error) {
-	return ds.getKey(key)
+func (fs *Filestore) Has(key datastore.Key) (exists bool, err error) {
+	ipfskey := ipfsds.NewKey(key.String())
+	return fs.Node().Repo.Datastore().Has(ipfskey)
 }
 
-func (ds *Filestore) Put(file files.File, pin bool) (key datastore.Key, err error) {
+func (fs *Filestore) Get(key datastore.Key) (files.File, error) {
+	// fs.Node().Repo.Datastore().Get(key)
+	return fs.getKey(key)
+}
+
+func (fs *Filestore) Fetch(source cafs.Source, key datastore.Key) (files.File, error) {
+	return fs.getKey(key)
+}
+
+func (fs *Filestore) Put(file files.File, pin bool) (key datastore.Key, err error) {
 	data, err := ioutil.ReadAll(file)
 	if err != nil {
 		return datastore.NewKey(""), err
 	}
 
-	hash, err := ds.AddBytes(data, pin)
+	hash, err := fs.AddBytes(data, pin)
 	if err != nil {
 		return datastore.NewKey(""), err
 	}
 	return datastore.NewKey("/ipfs/" + hash), nil
 }
 
-func (ds *Filestore) Delete(datastore.Key) error {
-	// TODO
-	return fmt.Errorf("delete is unsupported")
+func (fs *Filestore) Delete(path datastore.Key) error {
+	// TODO - formally remove files?
+	return fs.Unpin(path, true)
 }
 
-func (ds *Filestore) getKey(key datastore.Key) (files.File, error) {
+func (fs *Filestore) getKey(key datastore.Key) (files.File, error) {
 	p := path.Path(key.String())
-	node := ds.node
+	node := fs.node
+
+	// TODO - we'll need a "local" list for this to work properly
+	// currently this thing is *always* going to check the d.web for
+	// a hash if it's online, which is a behaviour we need control over
+	// might be worth expanding the cafs interface with the concept of
+	// remote gets
 	dn, err := core.Resolve(node.Context(), node.Namesys, node.Resolver, p)
 	if err != nil {
 		fmt.Println("resolver error")
 		return nil, err
 	}
 
+	// fmt.Println()
 	// switch dn := dn.(type) {
 	//   case *dag.ProtoNode:
 	//     size, err := dn.Size()
@@ -95,7 +114,6 @@ func (ds *Filestore) getKey(key datastore.Key) (files.File, error) {
 	//       res.SetError(err, cmds.ErrNormal)
 	//       return
 	//     }
-
 	//     res.SetLength(size)
 	//   case *dag.RawNode:
 	//     res.SetLength(uint64(len(dn.RawData())))
@@ -124,7 +142,6 @@ func (ds *Filestore) getKey(key datastore.Key) (files.File, error) {
 		return nil, err
 	}
 
-	// rf := files.NewReaderFile(key.String(), p.String(), f, 0777)
 	return memfs.NewMemfileReader(key.String(), f), nil
 }
 
@@ -150,8 +167,8 @@ func (a *Adder) Close() error {
 	return a.adder.PinRoot()
 }
 
-func (ds *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
-	node := ds.node
+func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
+	node := fs.Node()
 	ctx := context.Background()
 	bserv := blockservice.New(node.Blockstore, node.Exchange)
 	dagserv := dag.NewDAGService(bserv)
@@ -201,8 +218,8 @@ func (ds *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 	}, nil
 }
 
-func (ds *Filestore) AddPath(path string, pin bool) (hash string, err error) {
-	node := ds.node
+func (fs *Filestore) AddPath(path string, pin bool) (hash string, err error) {
+	node := fs.Node()
 
 	ctx := context.Background()
 	bserv := blockservice.New(node.Blockstore, node.Exchange)
@@ -259,8 +276,8 @@ func (ds *Filestore) AddPath(path string, pin bool) (hash string, err error) {
 }
 
 // AddAndPinBytes adds a file to the top level IPFS Node
-func (ds *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
-	node := ds.node
+func (fs *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
+	node := fs.Node()
 
 	ctx := context.Background()
 	bserv := blockservice.New(node.Blockstore, node.Exchange)
@@ -318,4 +335,14 @@ func (ds *Filestore) AddBytes(data []byte, pin bool) (hash string, err error) {
 
 	err = fmt.Errorf("something's gone horribly wrong")
 	return
+}
+
+func (fs *Filestore) Pin(path datastore.Key, recursive bool) error {
+	_, err := corerepo.Pin(fs.node, fs.node.Context(), []string{path.String()}, recursive)
+	return err
+}
+
+func (fs *Filestore) Unpin(path datastore.Key, recursive bool) error {
+	_, err := corerepo.Unpin(fs.node, fs.node.Context(), []string{path.String()}, recursive)
+	return err
 }
