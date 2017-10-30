@@ -3,6 +3,7 @@ package ipfs_filestore
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -268,6 +269,7 @@ func (fs *Filestore) AddFile(file files.File, pin bool) (hash string, err error)
 
 	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
 	fileAdder.Pin = pin
+	fileAdder.Wrap = file.IsDirectory()
 	if err != nil {
 		err = fmt.Errorf("error allocating adder: %s", err.Error())
 		return
@@ -278,54 +280,55 @@ func (fs *Filestore) AddFile(file files.File, pin bool) (hash string, err error)
 		file = memfs.NewMemdir("/", file)
 	}
 
-	// path := filepath.Join("/tmp", time.Now().String())
-
-	// if err = ioutil.WriteFile(path, data, os.ModePerm); err != nil {
-	// 	err = fmt.Errorf("error writing file: %s", err.Error())
-	// 	return
-	// }
-
-	// fi, err := os.Stat(path)
-	// if err != nil {
-	// 	err = fmt.Errorf("error getting file stats: %s", err.Error())
-	// 	return
-	// }
-
-	// rfile, err := files.NewSerialFile("", path, false, fi)
-	// if err != nil {
-	// 	err = fmt.Errorf("error creating serial file: %s", err.Error())
-	// 	return
-	// }
-
+	errChan := make(chan error, 0)
 	outChan := make(chan interface{}, 8)
-	defer close(outChan)
 
 	fileAdder.Out = outChan
 
-	if err = fileAdder.AddFile(file); err != nil {
-		err = fmt.Errorf("error adding file to adder: %s", err.Error())
-		return
-	}
-	if _, err = fileAdder.Finalize(); err != nil {
-		err = fmt.Errorf("error finalizing file adder: %s", err.Error())
-		return
-	}
-	if err = fileAdder.PinRoot(); err != nil {
-		err = fmt.Errorf("error pinning file root: %s", err.Error())
-		return
-	}
+	go func() {
+		defer close(outChan)
+		for {
+			file, err := file.NextFile()
+			if err == io.EOF {
+				// Finished the list of files.
+				break
+			} else if err != nil {
+				errChan <- err
+				return
+			}
+			fmt.Println(file.FileName())
+			if err := fileAdder.AddFile(file); err != nil {
+				errChan <- err
+				return
+			}
+		}
+		if _, err = fileAdder.Finalize(); err != nil {
+			errChan <- fmt.Errorf("error finalizing file adder: %s", err.Error())
+			return
+		}
+		if err = fileAdder.PinRoot(); err != nil {
+			errChan <- fmt.Errorf("error pinning file root: %s", err.Error())
+			return
+		}
+		// errChan <- nil
+	}()
 
 	for {
 		select {
 		case out, ok := <-outChan:
-			if ok {
-				output := out.(*coreunix.AddedObject)
-				if len(output.Hash) > 0 {
-					hash = output.Hash
-					return
-				}
+			if !ok {
+				return
 			}
+			output := out.(*coreunix.AddedObject)
+			if len(output.Hash) > 0 {
+				fmt.Println(output.Hash)
+				hash = output.Hash
+				// return
+			}
+		case err := <-errChan:
+			return hash, err
 		}
+
 	}
 
 	err = fmt.Errorf("something's gone horribly wrong")
