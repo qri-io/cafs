@@ -296,7 +296,7 @@ func (fs *Filestore) AddFile(file files.File, pin bool) (hash string, err error)
 				errChan <- err
 				return
 			}
-			fmt.Println(file.FileName())
+			// fmt.Println(file.FileName())
 			if err := fileAdder.AddFile(file); err != nil {
 				errChan <- err
 				return

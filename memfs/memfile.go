@@ -23,9 +23,11 @@ package memfs
 
 import (
 	"bytes"
-	"github.com/ipfs/go-ipfs/commands/files"
 	"io"
 	"path/filepath"
+	"strings"
+
+	"github.com/ipfs/go-ipfs/commands/files"
 )
 
 // PathSetter adds the capacity to modify a path property
@@ -157,6 +159,44 @@ func (d *Memdir) AddChildren(fs ...files.File) {
 		if fps, ok := f.(PathSetter); ok {
 			fps.SetPath(filepath.Join(d.FullPath(), f.FileName()))
 		}
-		d.children = append(d.children, f)
+		dir := d.MakeDirP(f)
+		dir.children = append(dir.children, f)
 	}
+}
+
+func (d *Memdir) ChildDir(dirname string) *Memdir {
+	if dirname == "" || dirname == "." || dirname == "/" {
+		return d
+	}
+	for _, f := range d.children {
+		if dir, ok := f.(*Memdir); ok {
+			if filepath.Base(dir.path) == dirname {
+				return dir
+			}
+		}
+	}
+	return nil
+}
+
+func (d *Memdir) MakeDirP(f files.File) *Memdir {
+	dirpath, _ := filepath.Split(f.FileName())
+	if dirpath == "" {
+		return d
+	}
+	dirs := strings.Split(dirpath[1:len(dirpath)-1], "/")
+	if len(dirs) == 1 {
+		return d
+	}
+
+	dir := d
+	for _, dirname := range dirs {
+		if ch := dir.ChildDir(dirname); ch != nil {
+			dir = ch
+			continue
+		}
+		ch := NewMemdir(filepath.Join(dir.FullPath(), dirname))
+		dir.children = append(dir.children, ch)
+		dir = ch
+	}
+	return dir
 }
