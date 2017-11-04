@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/ipfs/go-datastore"
-	"github.com/ipfs/go-ipfs/commands/files"
 	"github.com/jbenet/go-base58"
 	"github.com/multiformats/go-multihash"
 	"github.com/qri-io/cafs"
@@ -28,7 +27,7 @@ func (m MapStore) Tree() string {
 	for path, file := range m {
 		buf.WriteString(path.String() + "\n")
 		// fmt.Println(path, file)
-		cafs.Walk(file.File(), 0, func(f files.File, depth int) error {
+		cafs.Walk(file.File(), 0, func(f cafs.File, depth int) error {
 			buf.WriteString(strings.Repeat("  ", depth+1) + f.FileName() + "\n")
 			return nil
 		})
@@ -36,7 +35,7 @@ func (m MapStore) Tree() string {
 	return buf.String()
 }
 
-func (m MapStore) Put(file files.File, pin bool) (key datastore.Key, err error) {
+func (m MapStore) Put(file cafs.File, pin bool) (key datastore.Key, err error) {
 	if file.IsDirectory() {
 		buf := bytes.NewBuffer(nil)
 		dir := fsDir{
@@ -96,7 +95,7 @@ func (m MapStore) Put(file files.File, pin bool) (key datastore.Key, err error) 
 	return
 }
 
-func (m MapStore) Get(key datastore.Key) (files.File, error) {
+func (m MapStore) Get(key datastore.Key) (cafs.File, error) {
 	if m[key] == nil {
 		return nil, datastore.ErrNotFound
 	}
@@ -130,7 +129,7 @@ type adder struct {
 	out      chan cafs.AddedFile
 }
 
-func (a *adder) AddFile(f files.File) error {
+func (a *adder) AddFile(f cafs.File) error {
 	path, err := a.mapstore.Put(f, a.pin)
 	if err != nil {
 		fmt.Errorf("error putting file in mapstore: %s", err.Error())
@@ -174,7 +173,7 @@ type fsFile struct {
 	data []byte
 }
 
-func (f fsFile) File() files.File {
+func (f fsFile) File() cafs.File {
 	return &Memfile{
 		name: f.name,
 		path: f.path,
@@ -188,8 +187,8 @@ type fsDir struct {
 	files []datastore.Key
 }
 
-func (f fsDir) File() files.File {
-	files := make([]files.File, len(f.files))
+func (f fsDir) File() cafs.File {
+	files := make([]cafs.File, len(f.files))
 	for i, path := range f.files {
 		file, err := f.store.Get(path)
 		if err != nil {
@@ -205,5 +204,5 @@ func (f fsDir) File() files.File {
 }
 
 type filer interface {
-	File() files.File
+	File() cafs.File
 }

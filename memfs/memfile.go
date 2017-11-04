@@ -1,6 +1,6 @@
-// memfs satsfies the ipfs files.File interface in memory
-// An example pulled from tests will create a tree of "files"
-// with directories & files, with paths properly set:
+// memfs satsfies the ipfs cafs.File interface in memory
+// An example pulled from tests will create a tree of "cafs"
+// with directories & cafs, with paths properly set:
 // NewMemdir("/a",
 // 	NewMemfileBytes("a.txt", []byte("foo")),
 // 	NewMemfileBytes("b.txt", []byte("bar")),
@@ -12,20 +12,22 @@
 // 	),
 // )
 // File is an interface that provides functionality for handling
-// files/directories as values that can be supplied to commands.
+// cafs/directories as values that can be supplied to commands.
 //
 // This is pretty close to things that already exist in ipfs
 // and might not be necessary in most situations, but provides a sensible
 // degree of modularity for our purposes:
-// * memdir: github.com/ipfs/go-ipfs/commands/files.SerialFile
-// * memfs: github.com/ipfs/go-ipfs/commands/files.ReaderFile
+// * memdir: github.com/ipfs/go-ipfs/commands/cafs.SerialFile
+// * memfs: github.com/ipfs/go-ipfs/commands/cafs.ReaderFile
 package memfs
 
 import (
 	"bytes"
-	"github.com/ipfs/go-ipfs/commands/files"
 	"io"
 	"path/filepath"
+	"strings"
+
+	"github.com/qri-io/cafs"
 )
 
 // PathSetter adds the capacity to modify a path property
@@ -40,8 +42,8 @@ type Memfile struct {
 	path string
 }
 
-// Confirm that Memfile satisfies the files.File interface
-var _ = (files.File)(&Memfile{})
+// Confirm that Memfile satisfies the cafs.File interface
+var _ = (cafs.File)(&Memfile{})
 
 // NewMemfileBytes creates a file from an io.Reader
 func NewMemfileReader(name string, r io.Reader) *Memfile {
@@ -86,8 +88,8 @@ func (Memfile) IsDirectory() bool {
 	return false
 }
 
-func (Memfile) NextFile() (files.File, error) {
-	return nil, files.ErrNotDirectory
+func (Memfile) NextFile() (cafs.File, error) {
+	return nil, cafs.ErrNotDirectory
 }
 
 // Memdir is an in-memory directory
@@ -95,28 +97,28 @@ func (Memfile) NextFile() (files.File, error) {
 type Memdir struct {
 	path     string
 	fi       int // file index for reading
-	children []files.File
+	children []cafs.File
 }
 
-// Confirm that Memdir satisfies the files.File interface
-var _ = (files.File)(&Memdir{})
+// Confirm that Memdir satisfies the cafs.File interface
+var _ = (cafs.File)(&Memdir{})
 
 // NewMemdir creates a new Memdir, supplying zero or more children
-func NewMemdir(path string, children ...files.File) *Memdir {
+func NewMemdir(path string, children ...cafs.File) *Memdir {
 	m := &Memdir{
 		path:     path,
-		children: []files.File{},
+		children: []cafs.File{},
 	}
 	m.AddChildren(children...)
 	return m
 }
 
 func (Memdir) Close() error {
-	return files.ErrNotReader
+	return cafs.ErrNotReader
 }
 
 func (Memdir) Read([]byte) (int, error) {
-	return 0, files.ErrNotReader
+	return 0, cafs.ErrNotReader
 }
 
 func (m Memdir) FileName() string {
@@ -131,7 +133,7 @@ func (Memdir) IsDirectory() bool {
 	return true
 }
 
-func (d *Memdir) NextFile() (files.File, error) {
+func (d *Memdir) NextFile() (cafs.File, error) {
 	if d.fi >= len(d.children) {
 		d.fi = 0
 		return nil, io.EOF
@@ -152,11 +154,49 @@ func (d *Memdir) SetPath(path string) {
 // AddChildren allows any sort of file to be added, but only
 // implementations that implement the PathSetter interface will have
 // properly configured paths.
-func (d *Memdir) AddChildren(fs ...files.File) {
+func (d *Memdir) AddChildren(fs ...cafs.File) {
 	for _, f := range fs {
 		if fps, ok := f.(PathSetter); ok {
 			fps.SetPath(filepath.Join(d.FullPath(), f.FileName()))
 		}
-		d.children = append(d.children, f)
+		dir := d.MakeDirP(f)
+		dir.children = append(dir.children, f)
 	}
+}
+
+func (d *Memdir) ChildDir(dirname string) *Memdir {
+	if dirname == "" || dirname == "." || dirname == "/" {
+		return d
+	}
+	for _, f := range d.children {
+		if dir, ok := f.(*Memdir); ok {
+			if filepath.Base(dir.path) == dirname {
+				return dir
+			}
+		}
+	}
+	return nil
+}
+
+func (d *Memdir) MakeDirP(f cafs.File) *Memdir {
+	dirpath, _ := filepath.Split(f.FileName())
+	if dirpath == "" {
+		return d
+	}
+	dirs := strings.Split(dirpath[1:len(dirpath)-1], "/")
+	if len(dirs) == 1 {
+		return d
+	}
+
+	dir := d
+	for _, dirname := range dirs {
+		if ch := dir.ChildDir(dirname); ch != nil {
+			dir = ch
+			continue
+		}
+		ch := NewMemdir(filepath.Join(dir.FullPath(), dirname))
+		dir.children = append(dir.children, ch)
+		dir = ch
+	}
+	return dir
 }

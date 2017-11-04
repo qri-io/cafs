@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/ipfs/go-datastore"
-	"github.com/ipfs/go-ipfs/commands/files"
 )
 
 var (
@@ -22,14 +21,14 @@ var (
 // toward compatibility with git (git-scm.com), then maybe other stuff, who knows.
 type Filestore interface {
 	// put places a raw slice of bytes. Expect this to change to something like:
-	// Put(file files.File, options map[string]interface{}) (key datastore.Key, err error)
+	// Put(file File, options map[string]interface{}) (key datastore.Key, err error)
 	// The most notable difference from a standard file store is the store itself determines
 	// the resulting key (google "content addressing" for more info ;)
-	Put(file files.File, pin bool) (key datastore.Key, err error)
+	Put(file File, pin bool) (key datastore.Key, err error)
 
 	// Get retrieves the object `value` named by `key`.
 	// Get will return ErrNotFound if the key is not mapped to a value.
-	Get(key datastore.Key) (file files.File, err error)
+	Get(key datastore.Key) (file File, err error)
 
 	// Has returns whether the `key` is mapped to a `value`.
 	// In some contexts, it may be much cheaper only to check for existence of
@@ -54,7 +53,7 @@ type Filestore interface {
 // filestores can opt into the fetcher interface
 type Fetcher interface {
 	// Fetch gets a file from a source
-	Fetch(source Source, key datastore.Key) (files.SizeFile, error)
+	Fetch(source Source, key datastore.Key) (SizeFile, error)
 }
 
 // Source identifies where a file should come from.
@@ -90,7 +89,7 @@ type Adder interface {
 	// AddFile adds a file or directory of files to the store
 	// this function will return immideately, consumers should read
 	// from the Added() channel to see the results of file addition.
-	AddFile(files.File) error
+	AddFile(File) error
 	// Added gives a channel to read added files from.
 	Added() chan AddedFile
 	// In IPFS land close calls adder.Finalize() and adder.PinRoot()
@@ -110,7 +109,7 @@ type AddedFile struct {
 }
 
 // Walk traverses a file tree calling visit on each node
-func Walk(root files.File, depth int, visit func(f files.File, depth int) error) (err error) {
+func Walk(root File, depth int, visit func(f File, depth int) error) (err error) {
 	if err := visit(root, depth); err != nil {
 		return err
 	}

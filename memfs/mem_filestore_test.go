@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/ipfs/go-datastore"
-	"github.com/ipfs/go-ipfs/commands/files"
 	"github.com/qri-io/cafs"
 	"io/ioutil"
 	"testing"
@@ -103,7 +102,7 @@ func Directory(f cafs.Filestore) error {
 	}
 
 	paths := []string{}
-	cafs.Walk(outf, 0, func(f files.File, depth int) error {
+	cafs.Walk(outf, 0, func(f cafs.File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})
