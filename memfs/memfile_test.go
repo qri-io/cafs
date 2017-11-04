@@ -1,7 +1,6 @@
 package memfs
 
 import (
-	"github.com/ipfs/go-ipfs/commands/files"
 	"github.com/qri-io/cafs"
 	"testing"
 )
@@ -36,7 +35,7 @@ func TestMemfile(t *testing.T) {
 	}
 
 	paths := []string{}
-	err := cafs.Walk(a, 0, func(f files.File, depth int) error {
+	err := cafs.Walk(a, 0, func(f cafs.File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})
@@ -71,7 +70,7 @@ func TestMemdirMakeDirP(t *testing.T) {
 	}
 
 	paths := []string{}
-	err := cafs.Walk(dir, 0, func(f files.File, depth int) error {
+	err := cafs.Walk(dir, 0, func(f cafs.File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})
