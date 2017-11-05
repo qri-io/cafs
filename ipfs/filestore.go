@@ -62,16 +62,16 @@ func (fs *Filestore) Has(key datastore.Key) (exists bool, err error) {
 	return fs.Node().Repo.Datastore().Has(ipfskey)
 }
 
-func (fs *Filestore) Get(key datastore.Key) (files.File, error) {
+func (fs *Filestore) Get(key datastore.Key) (cafs.File, error) {
 	// fs.Node().Repo.Datastore().Get(key)
 	return fs.getKey(key)
 }
 
-func (fs *Filestore) Fetch(source cafs.Source, key datastore.Key) (files.File, error) {
+func (fs *Filestore) Fetch(source cafs.Source, key datastore.Key) (cafs.File, error) {
 	return fs.getKey(key)
 }
 
-func (fs *Filestore) Put(file files.File, pin bool) (key datastore.Key, err error) {
+func (fs *Filestore) Put(file cafs.File, pin bool) (key datastore.Key, err error) {
 	hash, err := fs.AddFile(file, pin)
 	if err != nil {
 		err = fmt.Errorf("error adding bytes: %s", err.Error())
@@ -85,7 +85,7 @@ func (fs *Filestore) Delete(path datastore.Key) error {
 	return fs.Unpin(path, true)
 }
 
-func (fs *Filestore) getKey(key datastore.Key) (files.File, error) {
+func (fs *Filestore) getKey(key datastore.Key) (cafs.File, error) {
 	p := path.Path(key.String())
 	node := fs.node
 
@@ -130,8 +130,8 @@ type Adder struct {
 	added chan cafs.AddedFile
 }
 
-func (a *Adder) AddFile(f files.File) error {
-	return a.adder.AddFile(f)
+func (a *Adder) AddFile(f cafs.File) error {
+	return a.adder.AddFile(wrapFile{f})
 }
 func (a *Adder) Added() chan cafs.AddedFile {
 	return a.added
@@ -260,7 +260,7 @@ func (fs *Filestore) AddPath(path string, pin bool) (hash string, err error) {
 }
 
 // AddAndPinBytes adds a file to the top level IPFS Node
-func (fs *Filestore) AddFile(file files.File, pin bool) (hash string, err error) {
+func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) {
 	node := fs.Node()
 
 	ctx := context.Background()
@@ -297,7 +297,7 @@ func (fs *Filestore) AddFile(file files.File, pin bool) (hash string, err error)
 				return
 			}
 			// fmt.Println(file.FileName())
-			if err := fileAdder.AddFile(file); err != nil {
+			if err := fileAdder.AddFile(wrapFile{file}); err != nil {
 				errChan <- err
 				return
 			}
@@ -343,4 +343,16 @@ func (fs *Filestore) Pin(path datastore.Key, recursive bool) error {
 func (fs *Filestore) Unpin(path datastore.Key, recursive bool) error {
 	_, err := corerepo.Unpin(fs.node, fs.node.Context(), []string{path.String()}, recursive)
 	return err
+}
+
+type wrapFile struct {
+	cafs.File
+}
+
+func (w wrapFile) NextFile() (files.File, error) {
+	next, err := w.File.NextFile()
+	if err != nil {
+		return nil, err
+	}
+	return wrapFile{next}, nil
 }
