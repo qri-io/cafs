@@ -3,12 +3,14 @@ package test
 import (
 	"bytes"
 	"fmt"
-	"github.com/ipfs/go-datastore"
-	"github.com/qri-io/cafs/memfs"
 	"io/ioutil"
+
+	"github.com/ipfs/go-datastore"
+	"github.com/qri-io/cafs"
+	"github.com/qri-io/cafs/memfs"
 )
 
-func RunFilestoreTests(f Filestore) error {
+func RunFilestoreTests(f cafs.Filestore) error {
 	fdata := []byte("foo")
 	file := memfs.NewMemfileBytes("file.txt", fdata)
 	key, err := f.Put(file, false)
@@ -55,7 +57,7 @@ func RunFilestoreTests(f Filestore) error {
 	return nil
 }
 
-func RunFilestoreAdderTests(f Filestore) error {
+func RunFilestoreAdderTests(f cafs.Filestore) error {
 	adder, err := f.NewAdder(false, false)
 	if err != nil {
 		return fmt.Errorf("Filestore.NewAdder(false,false) error: %s", err.Error())
