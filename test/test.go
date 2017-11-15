@@ -18,6 +18,11 @@ func RunFilestoreTests(f cafs.Filestore) error {
 		return fmt.Errorf("Filestore.Put(%s) error: %s", file.FileName(), err.Error())
 	}
 
+	pre := "/" + f.PathPrefix() + "/"
+	if key.String()[:len(pre)] != pre {
+		return fmt.Errorf("key returned didn't return a that matches this Filestore's PathPrefix. Expected: %s/..., got: %s", pre, key.String())
+	}
+
 	outf, err := f.Get(key)
 	if err != nil {
 		return fmt.Errorf("Filestore.Get(%s) error: %s", key.String(), err.Error())
@@ -31,7 +36,7 @@ func RunFilestoreTests(f cafs.Filestore) error {
 		// return fmt.Errorf("mismatched return value from get: %s != %s", outf.FileName(), string(data))
 	}
 
-	has, err := f.Has(datastore.NewKey("----------no-match---------"))
+	has, err := f.Has(datastore.NewKey("no-match"))
 	if err != nil {
 		return fmt.Errorf("Filestore.Has([nonexistent key]) error: %s", err.Error())
 	}
@@ -39,6 +44,7 @@ func RunFilestoreTests(f cafs.Filestore) error {
 		return fmt.Errorf("filestore claims to have a very silly key")
 	}
 
+	// TODO - need to restore this, currently it'll make ipfs filestore tests fail
 	has, err = f.Has(key)
 	if err != nil {
 		return fmt.Errorf("Filestore.Has(%s) error: %s", key.String(), err.Error())
