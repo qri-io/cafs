@@ -9,7 +9,6 @@ import (
 
 	datastore "github.com/ipfs/go-datastore"
 	blockservice "github.com/ipfs/go-ipfs/blockservice"
-	files "github.com/ipfs/go-ipfs/commands/files"
 	core "github.com/ipfs/go-ipfs/core"
 	corerepo "github.com/ipfs/go-ipfs/core/corerepo"
 	coreunix "github.com/ipfs/go-ipfs/core/coreunix"
@@ -20,6 +19,7 @@ import (
 	cafs "github.com/qri-io/cafs"
 	memfs "github.com/qri-io/cafs/memfs"
 
+	"gx/ipfs/QmUyfy4QSr3NXym4etEiRyxBLqqAeKHJuRdi8AACxg63fZ/go-ipfs-cmdkit/files"
 	ipfsds "gx/ipfs/QmVSase1JP7cq9QkPT46oNwdp9pT6kBkG3oqS14y3QcZjG/go-datastore"
 )
 
