@@ -14,12 +14,11 @@ jobs:
       - run: mkdir -p $TEST_RESULTS
       - run: 
           name: Install gx
-          command: go get -v -u github.com/whyrusleeping/gx && go get -v -u github.com/whyrusleeping/gx-go 
+          command: go get -v -u github.com/whyrusleeping/gx github.com/whyrusleeping/gx-go 
       - run:
           name: Install non-gx deps
           command: >
             go get -t -d -v 
-            github.com/ipfs/go-ipfs
             github.com/ipfs/go-datastore
             github.com/jbenet/goprocess
             github.com/satori/go.uuid
@@ -36,11 +35,13 @@ jobs:
             cd /go/src/github.com/ipfs/go-ipfs &&
             gx install &&
             cd /go/src/github.com/qri-io/cafs
+      - run: 
+          name: 
+          command: go get github.com/ipfs/go-ipfs github.com/qri-io/cafs
       - save_cache:
           key: dependency-cache-{{ checksum "/go/src/github.com/ipfs/go-ipfs/package.json" }}
           paths:
             - /go/src/gx/
-      - run: go get github.com/jstemmer/go-junit-report
       - run:
           name: Run Tests
           command: |
