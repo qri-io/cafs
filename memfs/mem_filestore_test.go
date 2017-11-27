@@ -3,10 +3,11 @@ package memfs
 import (
 	"bytes"
 	"fmt"
-	"github.com/ipfs/go-datastore"
-	"github.com/qri-io/cafs"
 	"io/ioutil"
 	"testing"
+
+	"github.com/ipfs/go-datastore"
+	"github.com/qri-io/cafs"
 )
 
 func TestMemFilestore(t *testing.T) {
