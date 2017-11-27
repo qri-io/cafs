@@ -12,9 +12,6 @@ jobs:
     steps:
       - checkout
       - run: mkdir -p $TEST_RESULTS
-      - run: 
-          name: Install gx
-          command: go get -v -u github.com/whyrusleeping/gx github.com/whyrusleeping/gx-go 
       - run:
           name: Install non-gx deps
           command: >
@@ -29,15 +26,19 @@ jobs:
             golang.org/x/crypto/blake2b
       - restore_cache:
           key: dependency-cache-{{ checksum "/go/src/github.com/ipfs/go-ipfs/package.json" }}
+      - run: 
+          name: Install gx
+          command: go get -v -u github.com/whyrusleeping/gx github.com/whyrusleeping/gx-go 
       - run:
           name: Install gx deps
           command: >
+            go get github.com/ipfs/go-ipfs &&
             cd /go/src/github.com/ipfs/go-ipfs &&
             gx install &&
             cd /go/src/github.com/qri-io/cafs
       - run: 
           name: 
-          command: go get github.com/ipfs/go-ipfs github.com/qri-io/cafs
+          command: go get github.com/qri-io/cafs github.com/qri-io/cafs/ipfs github.com/qri-io/cafs/memfs
       - save_cache:
           key: dependency-cache-{{ checksum "/go/src/github.com/ipfs/go-ipfs/package.json" }}
           paths:
