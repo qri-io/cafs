@@ -25,6 +25,19 @@ func (m MapStore) PathPrefix() string {
 	return "map"
 }
 
+func (m MapStore) Print() (string, error) {
+	buf := &bytes.Buffer{}
+	for key, file := range m {
+		data, err := ioutil.ReadAll(file.File())
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(buf, "%s:%s\n\t%s\n", key, file.File().FileName(), string(data))
+	}
+
+	return buf.String(), nil
+}
+
 func (m MapStore) Put(file cafs.File, pin bool) (key datastore.Key, err error) {
 	if file.IsDirectory() {
 		buf := bytes.NewBuffer(nil)
