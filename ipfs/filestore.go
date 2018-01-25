@@ -1,11 +1,11 @@
 package ipfs_filestore
 
 import (
+	"archive/tar"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	datastore "github.com/ipfs/go-datastore"
 	cafs "github.com/qri-io/cafs"
@@ -19,7 +19,7 @@ import (
 	coreunix "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/core/coreunix"
 	dag "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/merkledag"
 	path "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/path"
-	tar "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/thirdparty/tar"
+	// tar "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/thirdparty/tar"
 	uarchive "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/unixfs/archive"
 )
 
@@ -123,27 +123,20 @@ func (fs *Filestore) getKey(key datastore.Key) (cafs.File, error) {
 		return nil, fmt.Errorf("error resolving hash: %s", err.Error())
 	}
 
-	rdr, err := uarchive.DagArchive(node.Context(), dn, p.String(), node.DAG, false, 0)
+	r, err := uarchive.DagArchive(node.Context(), dn, p.String(), node.DAG, false, 0)
 	if err != nil {
 		return nil, fmt.Errorf("error unarchiving DAG: %s", err.Error())
 	}
 
-	fp := filepath.Join("/tmp", key.BaseNamespace())
+	tr := tar.NewReader(r)
 
-	e := tar.Extractor{
-		Path:     fp,
-		Progress: func(int64) int64 { return 0 },
-	}
-	if err := e.Extract(rdr); err != nil {
-		return nil, fmt.Errorf("error extracting from tar reader: %s", err.Error())
+	// call next to set cursor at first file
+	_, err = tr.Next()
+	if err != nil && err != io.EOF {
+		return nil, fmt.Errorf("tar archive error: %s", err.Error())
 	}
 
-	f, err := os.Open(fp)
-	if err != nil {
-		return nil, fmt.Errorf("error opening file: %s", err.Error())
-	}
-
-	return memfs.NewMemfileReader(key.String(), f), nil
+	return memfs.NewMemfileReader(key.String(), tr), nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface
