@@ -56,9 +56,6 @@ func InitRepo(repoPath, configPath string) error {
 }
 
 func doInit(out io.Writer, repoRoot string, empty bool, nBitsForKeypair int, confProfiles []string, conf *config.Config) error {
-	if _, err := fmt.Fprintf(out, "initializing IPFS node at %s\n", repoRoot); err != nil {
-		return err
-	}
 
 	if err := checkWriteable(repoRoot); err != nil {
 		return err
@@ -66,6 +63,9 @@ func doInit(out io.Writer, repoRoot string, empty bool, nBitsForKeypair int, con
 
 	if fsrepo.IsInitialized(repoRoot) {
 		return errRepoExists
+	}
+	if _, err := fmt.Fprintf(out, "initializing IPFS node at %s\n", repoRoot); err != nil {
+		return err
 	}
 
 	if conf == nil {
