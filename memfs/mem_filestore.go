@@ -118,7 +118,7 @@ func (m MapStore) Delete(key datastore.Key) error {
 }
 
 func (m MapStore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
-	addedOut := make(chan cafs.AddedFile, 8)
+	addedOut := make(chan cafs.AddedFile, 9)
 	return &adder{
 		mapstore: m,
 		out:      addedOut,
