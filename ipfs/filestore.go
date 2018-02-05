@@ -172,8 +172,8 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 		return nil, fmt.Errorf("error allocating adder: %s", err.Error())
 	}
 
-	outChan := make(chan interface{}, 8)
-	added := make(chan cafs.AddedFile, 8)
+	outChan := make(chan interface{}, 9)
+	added := make(chan cafs.AddedFile, 9)
 	a.Out = outChan
 	a.Pin = pin
 	a.Wrap = wrap
@@ -236,7 +236,7 @@ func (fs *Filestore) AddPath(path string, pin bool) (hash string, err error) {
 		return
 	}
 
-	outChan := make(chan interface{}, 8)
+	outChan := make(chan interface{}, 9)
 	defer close(outChan)
 
 	fileAdder.Out = outChan
@@ -296,7 +296,7 @@ func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) 
 	}
 
 	errChan := make(chan error, 0)
-	outChan := make(chan interface{}, 8)
+	outChan := make(chan interface{}, 9)
 
 	fileAdder.Out = outChan
 
