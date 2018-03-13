@@ -27,11 +27,11 @@ jobs:
             github.com/ipfs/go-datastore
             github.com/jbenet/goprocess
             github.com/satori/go.uuid
-            leb.io/hashland/keccakpg
             github.com/jbenet/go-base58
             github.com/multiformats/go-multihash
             github.com/spaolacci/murmur3
             golang.org/x/crypto/blake2b
+            cloud.google.com/go/storage
       - restore_cache:
           key: dependency-cache-{{ checksum "package.json" }}
       - run:
