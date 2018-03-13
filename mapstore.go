@@ -1,4 +1,4 @@
-package memfs
+package cafs
 
 import (
 	"bytes"
@@ -9,16 +9,35 @@ import (
 	"github.com/ipfs/go-datastore"
 	"github.com/jbenet/go-base58"
 	"github.com/multiformats/go-multihash"
-	"github.com/qri-io/cafs"
 )
 
 // NewMamstore allocates an instance of a mapstore
-func NewMapstore() cafs.Filestore {
+func NewMapstore() Filestore {
 	return MapStore{}
 }
 
-// MapStore implements Filestore in-memory as a map. This thing needs attention.
-// TODO - fixme
+// MapStore implements Filestore in-memory as a map
+
+// An example pulled from tests will create a tree of "cafs"
+// with directories & cafs, with paths properly set:
+// NewMemdir("/a",
+// 	NewMemfileBytes("a.txt", []byte("foo")),
+// 	NewMemfileBytes("b.txt", []byte("bar")),
+// 	NewMemdir("/c",
+// 		NewMemfileBytes("d.txt", []byte("baz")),
+// 		NewMemdir("/e",
+// 			NewMemfileBytes("f.txt", []byte("bat")),
+// 		),
+// 	),
+// )
+// File is an interface that provides functionality for handling
+// cafs/directories as values that can be supplied to commands.
+//
+// This is pretty close to things that already exist in ipfs
+// and might not be necessary in most situations, but provides a sensible
+// degree of modularity for our purposes:
+// * memdir: github.com/ipfs/go-ipfs/commands/SerialFile
+// * memfs: github.com/ipfs/go-ipfs/commands/ReaderFile
 type MapStore map[datastore.Key]filer
 
 func (m MapStore) PathPrefix() string {
@@ -38,7 +57,7 @@ func (m MapStore) Print() (string, error) {
 	return buf.String(), nil
 }
 
-func (m MapStore) Put(file cafs.File, pin bool) (key datastore.Key, err error) {
+func (m MapStore) Put(file File, pin bool) (key datastore.Key, err error) {
 	if file.IsDirectory() {
 		buf := bytes.NewBuffer(nil)
 		dir := fsDir{
@@ -98,7 +117,7 @@ func (m MapStore) Put(file cafs.File, pin bool) (key datastore.Key, err error) {
 	return
 }
 
-func (m MapStore) Get(key datastore.Key) (cafs.File, error) {
+func (m MapStore) Get(key datastore.Key) (File, error) {
 	if m[key] == nil {
 		return nil, datastore.ErrNotFound
 	}
@@ -117,8 +136,8 @@ func (m MapStore) Delete(key datastore.Key) error {
 	return nil
 }
 
-func (m MapStore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
-	addedOut := make(chan cafs.AddedFile, 9)
+func (m MapStore) NewAdder(pin, wrap bool) (Adder, error) {
+	addedOut := make(chan AddedFile, 9)
 	return &adder{
 		mapstore: m,
 		out:      addedOut,
@@ -129,16 +148,16 @@ func (m MapStore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 type adder struct {
 	mapstore MapStore
 	pin      bool
-	out      chan cafs.AddedFile
+	out      chan AddedFile
 }
 
-func (a *adder) AddFile(f cafs.File) error {
+func (a *adder) AddFile(f File) error {
 	path, err := a.mapstore.Put(f, a.pin)
 	if err != nil {
 		fmt.Errorf("error putting file in mapstore: %s", err.Error())
 		return err
 	}
-	a.out <- cafs.AddedFile{
+	a.out <- AddedFile{
 		Path:  path,
 		Name:  f.FileName(),
 		Bytes: 0,
@@ -147,7 +166,7 @@ func (a *adder) AddFile(f cafs.File) error {
 	return nil
 }
 
-func (a *adder) Added() chan cafs.AddedFile {
+func (a *adder) Added() chan AddedFile {
 	return a.out
 }
 func (a *adder) Close() error {
@@ -176,7 +195,7 @@ type fsFile struct {
 	data []byte
 }
 
-func (f fsFile) File() cafs.File {
+func (f fsFile) File() File {
 	return &Memfile{
 		name: f.name,
 		path: f.path,
@@ -190,8 +209,8 @@ type fsDir struct {
 	files []datastore.Key
 }
 
-func (f fsDir) File() cafs.File {
-	files := make([]cafs.File, len(f.files))
+func (f fsDir) File() File {
+	files := make([]File, len(f.files))
 	for i, path := range f.files {
 		file, err := f.store.Get(path)
 		if err != nil {
@@ -201,11 +220,11 @@ func (f fsDir) File() cafs.File {
 	}
 
 	return &Memdir{
-		path:     f.path,
-		children: files,
+		path:  f.path,
+		links: files,
 	}
 }
 
 type filer interface {
-	File() cafs.File
+	File() File
 }

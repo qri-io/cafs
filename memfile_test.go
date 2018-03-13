@@ -1,7 +1,6 @@
-package memfs
+package cafs
 
 import (
-	"github.com/qri-io/cafs"
 	"testing"
 )
 
@@ -35,7 +34,7 @@ func TestMemfile(t *testing.T) {
 	}
 
 	paths := []string{}
-	err := cafs.Walk(a, 0, func(f cafs.File, depth int) error {
+	err := Walk(a, 0, func(f File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})
@@ -70,7 +69,7 @@ func TestMemdirMakeDirP(t *testing.T) {
 	}
 
 	paths := []string{}
-	err := cafs.Walk(dir, 0, func(f cafs.File, depth int) error {
+	err := Walk(dir, 0, func(f File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})

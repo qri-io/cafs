@@ -1,4 +1,4 @@
-package memfs
+package cafs
 
 import (
 	"bytes"
@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/ipfs/go-datastore"
-	"github.com/qri-io/cafs"
 )
 
 func TestMemFilestore(t *testing.T) {
@@ -24,7 +23,7 @@ func TestPathPrefix(t *testing.T) {
 	}
 }
 
-func RunFilestoreTests(f cafs.Filestore) error {
+func RunFilestoreTests(f Filestore) error {
 	if err := SingleFile(f); err != nil {
 		return err
 	}
@@ -40,7 +39,7 @@ func RunFilestoreTests(f cafs.Filestore) error {
 	return nil
 }
 
-func SingleFile(f cafs.Filestore) error {
+func SingleFile(f Filestore) error {
 	fdata := []byte("foo")
 	file := NewMemfileBytes("file.txt", fdata)
 	key, err := f.Put(file, false)
@@ -83,7 +82,7 @@ func SingleFile(f cafs.Filestore) error {
 	return nil
 }
 
-func Directory(f cafs.Filestore) error {
+func Directory(f Filestore) error {
 	file := NewMemdir("/a",
 		NewMemfileBytes("b.txt", []byte("a")),
 		NewMemdir("c",
@@ -110,7 +109,7 @@ func Directory(f cafs.Filestore) error {
 	}
 
 	paths := []string{}
-	cafs.Walk(outf, 0, func(f cafs.File, depth int) error {
+	Walk(outf, 0, func(f File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})
@@ -132,7 +131,7 @@ func Directory(f cafs.Filestore) error {
 	return nil
 }
 
-func RunFilestoreAdderTests(f cafs.Filestore) error {
+func RunFilestoreAdderTests(f Filestore) error {
 	adder, err := f.NewAdder(false, false)
 	if err != nil {
 		return fmt.Errorf("Filestore.NewAdder(false,false) error: %s", err.Error())

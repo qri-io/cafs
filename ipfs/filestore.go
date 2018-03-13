@@ -9,7 +9,6 @@ import (
 
 	datastore "github.com/ipfs/go-datastore"
 	cafs "github.com/qri-io/cafs"
-	memfs "github.com/qri-io/cafs/memfs"
 
 	ipfsds "gx/ipfs/QmVSase1JP7cq9QkPT46oNwdp9pT6kBkG3oqS14y3QcZjG/go-datastore"
 	blockservice "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/blockservice"
@@ -136,7 +135,7 @@ func (fs *Filestore) getKey(key datastore.Key) (cafs.File, error) {
 		return nil, fmt.Errorf("tar archive error: %s", err.Error())
 	}
 
-	return memfs.NewMemfileReader(key.String(), tr), nil
+	return cafs.NewMemfileReader(key.String(), tr), nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface
@@ -292,7 +291,7 @@ func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) 
 
 	// wrap in a folder if top level is a file
 	if !file.IsDirectory() {
-		file = memfs.NewMemdir("/", file)
+		file = cafs.NewMemdir("/", file)
 	}
 
 	errChan := make(chan error, 0)

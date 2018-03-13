@@ -1,33 +1,10 @@
-// memfs satsfies the ipfs cafs.File interface in memory
-// An example pulled from tests will create a tree of "cafs"
-// with directories & cafs, with paths properly set:
-// NewMemdir("/a",
-// 	NewMemfileBytes("a.txt", []byte("foo")),
-// 	NewMemfileBytes("b.txt", []byte("bar")),
-// 	NewMemdir("/c",
-// 		NewMemfileBytes("d.txt", []byte("baz")),
-// 		NewMemdir("/e",
-// 			NewMemfileBytes("f.txt", []byte("bat")),
-// 		),
-// 	),
-// )
-// File is an interface that provides functionality for handling
-// cafs/directories as values that can be supplied to commands.
-//
-// This is pretty close to things that already exist in ipfs
-// and might not be necessary in most situations, but provides a sensible
-// degree of modularity for our purposes:
-// * memdir: github.com/ipfs/go-ipfs/commands/cafs.SerialFile
-// * memfs: github.com/ipfs/go-ipfs/commands/cafs.ReaderFile
-package memfs
+package cafs
 
 import (
 	"bytes"
 	"io"
 	"path/filepath"
 	"strings"
-
-	"github.com/qri-io/cafs"
 )
 
 // PathSetter adds the capacity to modify a path property
@@ -42,8 +19,8 @@ type Memfile struct {
 	path string
 }
 
-// Confirm that Memfile satisfies the cafs.File interface
-var _ = (cafs.File)(&Memfile{})
+// Confirm that Memfile satisfies the File interface
+var _ = (File)(&Memfile{})
 
 // NewMemfileBytes creates a file from an io.Reader
 func NewMemfileReader(name string, r io.Reader) *Memfile {
@@ -88,37 +65,37 @@ func (Memfile) IsDirectory() bool {
 	return false
 }
 
-func (Memfile) NextFile() (cafs.File, error) {
-	return nil, cafs.ErrNotDirectory
+func (Memfile) NextFile() (File, error) {
+	return nil, ErrNotDirectory
 }
 
 // Memdir is an in-memory directory
-// Currently it only supports either Memfile & Memdir as children
+// Currently it only supports either Memfile & Memdir as links
 type Memdir struct {
-	path     string
-	fi       int // file index for reading
-	children []cafs.File
+	path  string
+	fi    int // file index for reading
+	links []File
 }
 
-// Confirm that Memdir satisfies the cafs.File interface
-var _ = (cafs.File)(&Memdir{})
+// Confirm that Memdir satisfies the File interface
+var _ = (File)(&Memdir{})
 
-// NewMemdir creates a new Memdir, supplying zero or more children
-func NewMemdir(path string, children ...cafs.File) *Memdir {
+// NewMemdir creates a new Memdir, supplying zero or more links
+func NewMemdir(path string, links ...File) *Memdir {
 	m := &Memdir{
-		path:     path,
-		children: []cafs.File{},
+		path:  path,
+		links: []File{},
 	}
-	m.AddChildren(children...)
+	m.AddChildren(links...)
 	return m
 }
 
 func (Memdir) Close() error {
-	return cafs.ErrNotReader
+	return ErrNotReader
 }
 
 func (Memdir) Read([]byte) (int, error) {
-	return 0, cafs.ErrNotReader
+	return 0, ErrNotReader
 }
 
 func (m Memdir) FileName() string {
@@ -133,18 +110,18 @@ func (Memdir) IsDirectory() bool {
 	return true
 }
 
-func (d *Memdir) NextFile() (cafs.File, error) {
-	if d.fi >= len(d.children) {
+func (d *Memdir) NextFile() (File, error) {
+	if d.fi >= len(d.links) {
 		d.fi = 0
 		return nil, io.EOF
 	}
 	defer func() { d.fi++ }()
-	return d.children[d.fi], nil
+	return d.links[d.fi], nil
 }
 
 func (d *Memdir) SetPath(path string) {
 	d.path = path
-	for _, f := range d.children {
+	for _, f := range d.links {
 		if fps, ok := f.(PathSetter); ok {
 			fps.SetPath(filepath.Join(path, f.FileName()))
 		}
@@ -154,13 +131,13 @@ func (d *Memdir) SetPath(path string) {
 // AddChildren allows any sort of file to be added, but only
 // implementations that implement the PathSetter interface will have
 // properly configured paths.
-func (d *Memdir) AddChildren(fs ...cafs.File) {
+func (d *Memdir) AddChildren(fs ...File) {
 	for _, f := range fs {
 		if fps, ok := f.(PathSetter); ok {
 			fps.SetPath(filepath.Join(d.FullPath(), f.FileName()))
 		}
 		dir := d.MakeDirP(f)
-		dir.children = append(dir.children, f)
+		dir.links = append(dir.links, f)
 	}
 }
 
@@ -168,7 +145,7 @@ func (d *Memdir) ChildDir(dirname string) *Memdir {
 	if dirname == "" || dirname == "." || dirname == "/" {
 		return d
 	}
-	for _, f := range d.children {
+	for _, f := range d.links {
 		if dir, ok := f.(*Memdir); ok {
 			if filepath.Base(dir.path) == dirname {
 				return dir
@@ -178,7 +155,7 @@ func (d *Memdir) ChildDir(dirname string) *Memdir {
 	return nil
 }
 
-func (d *Memdir) MakeDirP(f cafs.File) *Memdir {
+func (d *Memdir) MakeDirP(f File) *Memdir {
 	dirpath, _ := filepath.Split(f.FileName())
 	if dirpath == "" {
 		return d
@@ -195,7 +172,7 @@ func (d *Memdir) MakeDirP(f cafs.File) *Memdir {
 			continue
 		}
 		ch := NewMemdir(filepath.Join(dir.FullPath(), dirname))
-		dir.children = append(dir.children, ch)
+		dir.links = append(dir.links, ch)
 		dir = ch
 	}
 	return dir
