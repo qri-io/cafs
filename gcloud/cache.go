@@ -8,7 +8,6 @@ import (
 	"cloud.google.com/go/storage"
 	"github.com/ipfs/go-datastore"
 	"github.com/qri-io/cafs"
-	"github.com/qri-io/cafs/memfs"
 )
 
 // CacheCfg configures cache behaviour
@@ -192,7 +191,7 @@ func (c Cache) getCache(key datastore.Key) (file cafs.File, err error) {
 		return nil, err
 	}
 
-	return memfs.NewMemfileReader(key.BaseNamespace(), r), err
+	return cafs.NewMemfileReader(key.BaseNamespace(), r), err
 }
 
 func (c Cache) deleteCache(key datastore.Key) error {

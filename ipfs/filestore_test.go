@@ -3,12 +3,13 @@ package ipfs_filestore
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/qri-io/cafs/memfs"
-	"github.com/qri-io/cafs/test"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/qri-io/cafs"
+	"github.com/qri-io/cafs/test"
 )
 
 func TestFilestore(t *testing.T) {
@@ -74,7 +75,7 @@ func BenchmarkRead(b *testing.B) {
 		return
 	}
 
-	key, err := f.Put(memfs.NewMemfileBytes(filepath.Base(egFilePath), data), true)
+	key, err := f.Put(cafs.NewMemfileBytes(filepath.Base(egFilePath), data), true)
 	if err != nil {
 		b.Errorf("error putting example file in store: %s", err.Error())
 		return
