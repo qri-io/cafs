@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 
 	datastore "github.com/ipfs/go-datastore"
+	logging "github.com/ipfs/go-log"
 	cafs "github.com/qri-io/cafs"
 
 	ipfsds "gx/ipfs/QmVSase1JP7cq9QkPT46oNwdp9pT6kBkG3oqS14y3QcZjG/go-datastore"
@@ -18,9 +18,10 @@ import (
 	coreunix "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/core/coreunix"
 	dag "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/merkledag"
 	path "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/path"
-	// tar "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/thirdparty/tar"
 	uarchive "gx/ipfs/QmViBzgruNUoLNBnXcx8YWbDNwV8MNGEGKkLo6JGetygdw/go-ipfs/unixfs/archive"
 )
+
+var log = logging.Logger("cafs/ipfs")
 
 type Filestore struct {
 	node *core.IpfsNode
@@ -90,7 +91,7 @@ func (fs *Filestore) Fetch(source cafs.Source, key datastore.Key) (cafs.File, er
 func (fs *Filestore) Put(file cafs.File, pin bool) (key datastore.Key, err error) {
 	hash, err := fs.AddFile(file, pin)
 	if err != nil {
-		err = fmt.Errorf("error adding bytes: %s", err.Error())
+		log.Infof("error adding bytes: %s", err.Error())
 		return
 	}
 	return datastore.NewKey("/ipfs/" + hash), nil
@@ -208,69 +209,6 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 		out:   outChan,
 		added: added,
 	}, nil
-}
-
-func (fs *Filestore) AddPath(path string, pin bool) (hash string, err error) {
-	node := fs.Node()
-
-	ctx := context.Background()
-	bserv := blockservice.New(node.Blockstore, node.Exchange)
-	dagserv := dag.NewDAGService(bserv)
-
-	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
-	if err != nil {
-		err = fmt.Errorf("error creating new adder: %s", err.Error())
-		return
-	}
-
-	fi, err := os.Stat(path)
-	if err != nil {
-		err = fmt.Errorf("error getting file stats: %s", err.Error())
-		return
-	}
-
-	rfile, err := files.NewSerialFile("", path, false, fi)
-	if err != nil {
-		err = fmt.Errorf("error creating new serial file: %s", err.Error())
-		return
-	}
-
-	outChan := make(chan interface{}, 9)
-	defer close(outChan)
-
-	fileAdder.Out = outChan
-	if err = fileAdder.AddFile(rfile); err != nil {
-		err = fmt.Errorf("error adding file: %s", err.Error())
-		return
-	}
-
-	if _, err = fileAdder.Finalize(); err != nil {
-		err = fmt.Errorf("error finalizing file adding: %s", err.Error())
-		return
-	}
-
-	if pin {
-		if err = fileAdder.PinRoot(); err != nil {
-			err = fmt.Errorf("error pinning root file: %s", err.Error())
-			return
-		}
-	}
-
-	for {
-		select {
-		case out, ok := <-outChan:
-			if ok {
-				output := out.(*coreunix.AddedObject)
-				if len(output.Hash) > 0 {
-					hash = output.Hash
-					return
-				}
-			}
-		}
-	}
-
-	err = fmt.Errorf("something's gone horribly wrong")
-	return
 }
 
 // AddAndPinBytes adds a file to the top level IPFS Node

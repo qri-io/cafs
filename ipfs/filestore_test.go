@@ -2,7 +2,6 @@ package ipfs_filestore
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -44,13 +43,11 @@ func BenchmarkRead(b *testing.B) {
 	path := filepath.Join(os.TempDir(), "ipfs_cafs_benchmark_read")
 
 	if _, err := os.Open(filepath.Join(path, "config")); os.IsNotExist(err) {
-		fmt.Println("MAKE NODE", err)
 		if err := os.MkdirAll(path, os.ModePerm); err != nil {
 			b.Errorf("error creating temp dir: %s", err.Error())
 			return
 		}
 
-		fmt.Println(path)
 		if err := InitRepo(path, ""); err != nil {
 			b.Errorf("error intializing repo: %s", err.Error())
 			return

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 
@@ -48,7 +49,7 @@ func InitRepo(repoPath, configPath string) error {
 		}
 	}
 
-	if err := doInit(os.Stdout, repoPath, false, nBitsForKeypair, nil, conf); err != nil {
+	if err := doInit(ioutil.Discard, repoPath, false, nBitsForKeypair, nil, conf); err != nil {
 		return err
 	}
 
