@@ -3,22 +3,32 @@ package ipfs_filestore
 import (
 	"archive/tar"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 
+	// goipld "github.com/ipfs/go-ipld-format"
 	datastore "github.com/ipfs/go-datastore"
 	logging "github.com/ipfs/go-log"
 	cafs "github.com/qri-io/cafs"
 
+	// cbornode "gx/ipfs/QmNRz7BDWfdFNVLt7AVvmRefkrURD25EeoipcXqo6yoXU1/go-ipld-cbor"
 	ipfsds "gx/ipfs/QmVSase1JP7cq9QkPT46oNwdp9pT6kBkG3oqS14y3QcZjG/go-datastore"
+	// mh "gx/ipfs/QmZyZDi491cCNTLfAhwcaDii2Kg4pwKRkhqQzURGDvY6ua/go-multihash"
 	blockservice "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/blockservice"
 	core "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/core"
+	coredag "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/core/coredag"
 	corerepo "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/core/corerepo"
 	coreunix "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/core/coreunix"
 	dag "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/merkledag"
 	path "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/path"
+	ipfspin "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/pin"
 	uarchive "gx/ipfs/QmatUACvrFK3xYg1nd2iLAKfz7Yy5YB56tnzBYHpqiUuhn/go-ipfs/unixfs/archive"
+	cid "gx/ipfs/QmcZfnkapfECQGcLZaf9B79NRg7cRa9EnZh4LSbkCzwNvY/go-cid"
+	// cmdkit "gx/ipfs/QmceUdzxkimdYsgtX733uNgzf1DLHyBKN6ehGSp85ayppM/go-ipfs-cmdkit"
 	files "gx/ipfs/QmceUdzxkimdYsgtX733uNgzf1DLHyBKN6ehGSp85ayppM/go-ipfs-cmdkit/files"
+	ipld "gx/ipfs/Qme5bWv7wtjUNGsK2BNGVUFPKiuxWrsqrtvYwCLRw8YFES/go-ipld-format"
 )
 
 var log = logging.Logger("cafs/ipfs")
@@ -63,19 +73,12 @@ func (fs *Filestore) Node() *core.IpfsNode {
 
 func (fs *Filestore) Has(key datastore.Key) (exists bool, err error) {
 	ipfskey := ipfsds.NewKey(key.String())
-	// TODO - we'll need a "local" list for this to work properly
-	// currently this thing is *always* going to check the d.web for
-	// a hash if it's online, which is a behaviour we need control over
-	// might be worth expanding the cafs interface with the concept of
-	// remote gets
-	// update 2017-10-23 - we now have a fetch interface, integrate? is it integrated?
+
 	if _, err = core.Resolve(fs.node.Context(), fs.node.Namesys, fs.node.Resolver, path.Path(ipfskey.String())); err != nil {
 		// TODO - return error here?
 		return false, nil
 	}
 
-	// I had hoped this would work, it doesn't.
-	// fs.Node().Repo.Datastore().Has(ipfskey)
 	return true, nil
 }
 
@@ -305,4 +308,127 @@ func (w wrapFile) NextFile() (files.File, error) {
 		return nil, err
 	}
 	return wrapFile{next}, nil
+}
+
+func (fs *Filestore) DAGPut(f cafs.File, pin bool) (p string, err error) {
+	n := fs.node
+	dopin := pin
+
+	// mhType tells inputParser which hash should be used. MaxUint64 means 'use
+	// default hash' (sha256 for cbor, sha1 for git..)
+	mhType := uint64(math.MaxUint64)
+
+	outChan := make(chan *cid.Cid, 8)
+
+	addAllAndPin := func(f files.File) error {
+		cids := cid.NewSet()
+		b := ipld.NewBatch(context.TODO(), n.DAG)
+
+		for {
+			file, err := f.NextFile()
+			if err == io.EOF {
+				// Finished the list of files.
+				break
+			} else if err != nil {
+				return err
+			}
+
+			nds, err := coredag.ParseInputs("json", "cbor", file, mhType, -1)
+			if err != nil {
+				return err
+			}
+			if len(nds) == 0 {
+				return fmt.Errorf("no node returned from ParseInputs")
+			}
+
+			for _, nd := range nds {
+				err := b.Add(nd)
+				if err != nil {
+					return err
+				}
+			}
+
+			cid := nds[0].Cid()
+			cids.Add(cid)
+			outChan <- cid
+		}
+
+		if err := b.Commit(); err != nil {
+			return err
+		}
+
+		if dopin {
+			defer n.Blockstore.PinLock().Unlock()
+
+			cids.ForEach(func(c *cid.Cid) error {
+				n.Pinning.PinWithMode(c, ipfspin.Recursive)
+				return nil
+			})
+
+			err := n.Pinning.Flush()
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	go func() {
+		defer close(outChan)
+		if !f.IsDirectory() {
+			f = cafs.NewMemdir("/", f)
+		}
+		if err = addAllAndPin(wrapFile{f}); err != nil {
+			return
+		}
+	}()
+
+	for out := range outChan {
+		p = out.String()
+	}
+
+	return
+}
+
+func (fs *Filestore) DAGGet(p string) (node cafs.DAGNode, err error) {
+	var out interface{}
+	n := fs.node
+
+	dpath, e := path.ParsePath(p)
+	if e != nil {
+		return nil, e
+	}
+
+	obj, rem, e := n.Resolver.ResolveToLastNode(context.TODO(), dpath)
+	if e != nil {
+		return nil, e
+	}
+
+	out = obj
+	if len(rem) > 0 {
+		final, _, e := obj.Resolve(rem)
+		if e != nil {
+			return nil, e
+		}
+		out = rawNode{final}
+	}
+
+	if n, ok := out.(cafs.DAGNode); ok {
+		return n, nil
+	}
+
+	return nil, fmt.Errorf("IPFS didn't return a valid cafs.DAGNode")
+}
+
+func (fs *Filestore) DAGDelete(path string) (err error) {
+	return nil
+}
+
+type rawNode struct {
+	value interface{}
+}
+
+func (rn rawNode) MarshalJSON() ([]byte, error) {
+	return json.Marshal(rn.value)
 }

@@ -6,6 +6,7 @@
 package cafs
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/ipfs/go-datastore"
@@ -137,4 +138,22 @@ func Walk(root File, depth int, visit func(f File, depth int) error) (err error)
 		}
 	}
 	return nil
+}
+
+type DAGFilestore interface {
+	Filestore
+	DAGStore
+}
+
+// DAGStore is the interface for storing directed acyclic graphs (DAGs) of linked data.
+// unlike Filestore's, DAGStores only work with specific kinds of structured data (eg. JSON, CBOR)
+// and don't support storing unstructured data
+type DAGStore interface {
+	DAGPut(f File, pin bool) (path string, err error)
+	DAGGet(path string) (node DAGNode, err error)
+	DAGDelete(path string) (err error)
+}
+
+type DAGNode interface {
+	json.Marshaler
 }

@@ -2,6 +2,7 @@ package ipfs_filestore
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -11,27 +12,43 @@ import (
 	"github.com/qri-io/cafs/test"
 )
 
-func TestFilestore(t *testing.T) {
-	path := filepath.Join(os.TempDir(), "ipfs_cafs_test")
-	if err := os.MkdirAll(path, os.ModePerm); err != nil {
-		t.Errorf("error creating temp dir: %s", err.Error())
-		return
-	}
-	defer os.RemoveAll(path)
+var _ cafs.DAGStore = (*Filestore)(nil)
 
-	if err := InitRepo(path, ""); err != nil {
-		t.Errorf("error intializing repo: %s", err.Error())
+func newFilestore(name string) (f *Filestore, destroy func(), err error) {
+	path := filepath.Join(os.TempDir(), name)
+
+	err = os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		err = fmt.Errorf("error creating temp dir: %s", err.Error())
 		return
 	}
 
-	f, err := NewFilestore(func(c *StoreCfg) {
+	destroy = func() {
+		if err := os.RemoveAll(path); err != nil {
+			fmt.Println(err.Error())
+		}
+	}
+
+	err = InitRepo(path, "")
+	if err != nil {
+		err = fmt.Errorf("error intializing repo: %s", err.Error())
+		return
+	}
+
+	f, err = NewFilestore(func(c *StoreCfg) {
 		c.Online = false
 		c.FsRepoPath = path
 	})
+	return
+}
+
+func TestFilestore(t *testing.T) {
+	f, destroy, err := newFilestore("cafs_test_filestore")
 	if err != nil {
-		t.Errorf("error creating filestore: %s", err.Error())
+		t.Error(err.Error())
 		return
 	}
+	defer destroy()
 
 	err = test.RunFilestoreTests(f)
 	if err != nil {
@@ -39,31 +56,145 @@ func TestFilestore(t *testing.T) {
 	}
 }
 
-func BenchmarkRead(b *testing.B) {
-	path := filepath.Join(os.TempDir(), "ipfs_cafs_benchmark_read")
-
-	if _, err := os.Open(filepath.Join(path, "config")); os.IsNotExist(err) {
-		if err := os.MkdirAll(path, os.ModePerm); err != nil {
-			b.Errorf("error creating temp dir: %s", err.Error())
-			return
-		}
-
-		if err := InitRepo(path, ""); err != nil {
-			b.Errorf("error intializing repo: %s", err.Error())
-			return
-		}
-
-		defer os.RemoveAll(path)
-	}
-
-	f, err := NewFilestore(func(c *StoreCfg) {
-		c.Online = false
-		c.FsRepoPath = path
-	})
+func TestDAG(t *testing.T) {
+	f, destroy, err := newFilestore("cafs_test_dag")
 	if err != nil {
-		b.Errorf("error creating filestore: %s", err.Error())
+		t.Error(err.Error())
 		return
 	}
+	defer destroy()
+
+	schemapath, err := f.DAGPut(cafs.NewMemfileBytes("schema.json", []byte(`{
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": [
+          {
+            "title": "city",
+            "type": "string"
+          },
+          {
+            "title": "pop",
+            "type": "integer"
+          },
+          {
+            "title": "avg_age",
+            "type": "number"
+          },
+          {
+            "title": "in_usa",
+            "type": "boolean"
+          }
+        ]
+      }
+    }
+  }`)), true)
+
+	if err != nil {
+		t.Errorf("error adding schema: %s", err.Error())
+		return
+	}
+	t.Logf("schema.json: %s", schemapath)
+
+	commitpath, err := f.DAGPut(cafs.NewMemfileBytes("commit.json", []byte(`{
+    "qri": "cm:0",
+    "title": "initial commit"
+  }`)), true)
+
+	if err != nil {
+		t.Errorf("error adding schema: %s", err.Error())
+		return
+	}
+	t.Logf("commit.json: %s", commitpath)
+
+	data := fmt.Sprintf(`{
+  "meta": {
+    "qri": "md:0",
+    "title": "example city data"
+  },
+  "commit": { "/" : "%s" },
+  "qri": "ds:0",
+  "structure": {
+    "qri": "st:0",
+    "format": "csv",
+    "formatConfig": {
+      "headerRow": true
+    },
+    "schema": { "/" : "%s" }
+  },
+  "visconfig": {
+    "qri": "vc:0",
+    "format": "example format",
+    "visualizations": "example visualization"
+  }
+}`, commitpath, schemapath)
+
+	path, err := f.DAGPut(cafs.NewMemfileBytes("dataset.json", []byte(data)), true)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+	t.Log(path)
+
+	node, err := f.DAGGet(path)
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	d, err := node.MarshalJSON()
+	if err != nil {
+		t.Errorf("DAGNode unmarshalJSON failed: %s", err.Error())
+		return
+	}
+	t.Logf("%s", d)
+
+	node, err = f.DAGGet(fmt.Sprintf("%s/structure/schema/type", path))
+	if err != nil {
+		t.Error(err.Error())
+		return
+	}
+
+	d, err = node.MarshalJSON()
+	if err != nil {
+		t.Errorf("DAGNode unmarshalJSON failed: %s", err.Error())
+		return
+	}
+	t.Logf("%s", d)
+	// file, err := f.Get(datastore.NewKey(d.(p)))
+	// if err != nil {
+	// 	t.Error(err.Error())
+	// 	return
+	// }
+
+	// outdata, err := ioutil.ReadAll(file)
+	// if err != nil {
+	// 	t.Error(err.Error())
+	// 	return
+	// }
+
+	// t.Log(string(outdata))
+
+	// if file.FileName() != "dataset" {
+	// 	t.Errorf("expected filename to be dataset.json, got: %s", file)
+	// 	return
+	// }
+
+	err = f.DAGDelete(path)
+	if err != nil {
+		t.Errorf("error deleting: %s", err.Error())
+		return
+	}
+
+}
+
+func BenchmarkRead(b *testing.B) {
+	f, destroy, err := newFilestore("cafs_test_benchmark")
+	if err != nil {
+		b.Error(err.Error())
+		return
+	}
+	defer destroy()
 
 	egFilePath := "testdata/complete.json"
 	data, err := ioutil.ReadFile(egFilePath)
@@ -103,5 +234,4 @@ func BenchmarkRead(b *testing.B) {
 			break
 		}
 	}
-
 }
