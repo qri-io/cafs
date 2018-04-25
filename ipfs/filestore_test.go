@@ -11,6 +11,8 @@ import (
 	"github.com/qri-io/cafs/test"
 )
 
+var _ cafs.Fetcher = (*Filestore)(nil)
+
 func TestFilestore(t *testing.T) {
 	path := filepath.Join(os.TempDir(), "ipfs_cafs_test")
 	if err := os.MkdirAll(path, os.ModePerm); err != nil {

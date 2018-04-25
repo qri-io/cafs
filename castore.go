@@ -59,7 +59,7 @@ type Filestore interface {
 // filestores can opt into the fetcher interface
 type Fetcher interface {
 	// Fetch gets a file from a source
-	Fetch(source Source, key datastore.Key) (SizeFile, error)
+	Fetch(source Source, key datastore.Key) (File, error)
 }
 
 // Source identifies where a file should come from.
