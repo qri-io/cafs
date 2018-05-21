@@ -5,19 +5,23 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io/ioutil"
+	"strings"
 
 	"github.com/ipfs/go-datastore"
 	"github.com/jbenet/go-base58"
 	"github.com/multiformats/go-multihash"
 )
 
-// NewMamstore allocates an instance of a mapstore
+// NewMapstore allocates an instance of a mapstore
 func NewMapstore() Filestore {
-	return MapStore{}
+	return &MapStore{
+		Network: make([]*MapStore, 0),
+		Files:   make(map[datastore.Key]filer),
+	}
 }
 
 // MapStore implements Filestore in-memory as a map
-
+//
 // An example pulled from tests will create a tree of "cafs"
 // with directories & cafs, with paths properly set:
 // NewMemdir("/a",
@@ -38,15 +42,51 @@ func NewMapstore() Filestore {
 // degree of modularity for our purposes:
 // * memdir: github.com/ipfs/go-ipfs/commands/SerialFile
 // * memfs: github.com/ipfs/go-ipfs/commands/ReaderFile
-type MapStore map[datastore.Key]filer
+//
+// Network simulates IPFS-like behavior, where nodes can connect
+// to each other to retrieve data from other machines
+type MapStore struct {
+	Pinned  bool
+	Network []*MapStore
+	Files   map[datastore.Key]filer
+}
 
+// PathPrefix returns the prefix on paths in the store
 func (m MapStore) PathPrefix() string {
 	return "map"
 }
 
+// AddConnection sets up pointers from this MapStore to that, and vice versa.
+func (m *MapStore) AddConnection(other *MapStore) {
+	if other == m {
+		return
+	}
+	// Add pointer from that network to this one.
+	found := false
+	for _, elem := range m.Network {
+		if other == elem {
+			found = true
+		}
+	}
+	if !found {
+		m.Network = append(m.Network, other)
+	}
+	// Add pointer from this network to that one.
+	found = false
+	for _, elem := range other.Network {
+		if m == elem {
+			found = true
+		}
+	}
+	if !found {
+		other.Network = append(other.Network, m)
+	}
+}
+
+// Print converts the store to a string
 func (m MapStore) Print() (string, error) {
 	buf := &bytes.Buffer{}
-	for key, file := range m {
+	for key, file := range m.Files {
 		data, err := ioutil.ReadAll(file.File())
 		if err != nil {
 			return "", err
@@ -57,11 +97,12 @@ func (m MapStore) Print() (string, error) {
 	return buf.String(), nil
 }
 
-func (m MapStore) Put(file File, pin bool) (key datastore.Key, err error) {
+// Put adds a file to the store
+func (m *MapStore) Put(file File, pin bool) (key datastore.Key, err error) {
 	if file.IsDirectory() {
 		buf := bytes.NewBuffer(nil)
 		dir := fsDir{
-			store: &m,
+			store: m,
 			path:  file.FullPath(),
 			files: []datastore.Key{},
 		}
@@ -77,7 +118,7 @@ func (m MapStore) Put(file File, pin bool) (key datastore.Key, err error) {
 					}
 					// fmt.Println("dirhash:", dirhash)
 					key = datastore.NewKey("/map/" + dirhash)
-					m[key] = dir
+					m.Files[key] = dir
 					return
 
 				}
@@ -111,37 +152,100 @@ func (m MapStore) Put(file File, pin bool) (key datastore.Key, err error) {
 			return
 		}
 		key = datastore.NewKey("/map/" + hash)
-		m[key] = fsFile{name: file.FileName(), path: file.FullPath(), data: data}
+		m.Files[key] = fsFile{name: file.FileName(), path: file.FullPath(), data: data}
 		return
 	}
 	return
 }
 
-func (m MapStore) Get(key datastore.Key) (File, error) {
-	if m[key] == nil {
-		return nil, datastore.ErrNotFound
+// Get returns a File from the store
+func (m *MapStore) Get(key datastore.Key) (File, error) {
+	// key may be of the form /map/QmFoo/file.json but MapStore indexes its maps
+	// using keys like /map/QmFoo. Trim after the second part of the key.
+	parts := strings.Split(key.String(), "/")
+	if len(parts) > 2 {
+		prefix := strings.Join([]string{"", parts[1], parts[2]}, "/")
+		key = datastore.NewKey(prefix)
 	}
-	return m[key].File(), nil
+	// Check if the local MapStore has the file.
+	f, err := m.getLocal(key)
+	if err == nil {
+		return f, nil
+	} else if err != datastore.ErrNotFound {
+		return nil, err
+	}
+	// Check if the anyone connected on the mock Network has the file.
+	for _, connect := range m.Network {
+		f, err := connect.getLocal(key)
+		if err == nil {
+			return f, nil
+		} else if err != datastore.ErrNotFound {
+			return nil, err
+		}
+	}
+	return nil, datastore.ErrNotFound
 }
 
+func (m *MapStore) getLocal(key datastore.Key) (File, error) {
+	if m.Files[key] == nil {
+		return nil, datastore.ErrNotFound
+	}
+	return m.Files[key].File(), nil
+}
+
+// Has returns whether the store has a File with the key
 func (m MapStore) Has(key datastore.Key) (exists bool, err error) {
-	if m[key] == nil {
+	if m.Files[key] == nil {
 		return false, nil
 	}
 	return true, nil
 }
 
+// Delete removes the file from the store with the key
 func (m MapStore) Delete(key datastore.Key) error {
-	delete(m, key)
+	delete(m.Files, key)
 	return nil
 }
 
+// NewAdder returns an Adder for the store
 func (m MapStore) NewAdder(pin, wrap bool) (Adder, error) {
 	addedOut := make(chan AddedFile, 9)
 	return &adder{
 		mapstore: m,
 		out:      addedOut,
 	}, nil
+}
+
+var _ Fetcher = (*MapStore)(nil)
+var _ Pinner = (*MapStore)(nil)
+
+// Fetch returns a File from the store
+func (m *MapStore) Fetch(source Source, key datastore.Key) (File, error) {
+	// TODO: Perhaps Fetch should hit the network but Get should not?
+	// Also, see comment in ./ipfs/filestore.go about local lists and integrating Fetch.
+	if len(m.Network) == 0 {
+		// TODO: Fetch only local files in this case. Fix test that depends on this.
+		return nil, fmt.Errorf("this store cannot fetch from remote sources")
+	}
+	return m.Get(key)
+}
+
+// Pin pins a File with the given key
+func (m *MapStore) Pin(key datastore.Key, recursive bool) error {
+	if m.Pinned {
+		return fmt.Errorf("already pinned")
+	}
+	m.Pinned = true
+	return nil
+}
+
+// Unpin unpins a File with the given key
+func (m *MapStore) Unpin(key datastore.Key, recursive bool) error {
+	if !m.Pinned {
+		return fmt.Errorf("not pinned")
+	}
+	m.Pinned = false
+	return nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface
