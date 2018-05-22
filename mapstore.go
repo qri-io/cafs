@@ -13,7 +13,7 @@ import (
 )
 
 // NewMapstore allocates an instance of a mapstore
-func NewMapstore() Filestore {
+func NewMapstore() *MapStore {
 	return &MapStore{
 		Network: make([]*MapStore, 0),
 		Files:   make(map[datastore.Key]filer),

@@ -35,7 +35,7 @@ func TestFilestore(t *testing.T) {
 		return
 	}
 
-	err = test.RunFilestoreTests(f)
+	err = test.EnsureFilestoreBehavior(f)
 	if err != nil {
 		t.Errorf(err.Error())
 	}

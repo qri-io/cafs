@@ -9,7 +9,17 @@ import (
 	"github.com/qri-io/cafs"
 )
 
-func RunFilestoreTests(f cafs.Filestore) error {
+func EnsureFilestoreBehavior(f cafs.Filestore) error {
+	if err := EnsureFilestoreSingleFileBehavior(f); err != nil {
+		return err
+	}
+	if err := EnsureFilestoreAdderBehavior(f); err != nil {
+		return err
+	}
+	return nil
+}
+
+func EnsureFilestoreSingleFileBehavior(f cafs.Filestore) error {
 	fdata := []byte("foo")
 	file := cafs.NewMemfileBytes("file.txt", fdata)
 	key, err := f.Put(file, false)
@@ -55,14 +65,59 @@ func RunFilestoreTests(f cafs.Filestore) error {
 		return fmt.Errorf("Filestore.Delete(%s) error: %s", key.String(), err.Error())
 	}
 
-	if err := RunFilestoreAdderTests(f); err != nil {
-		return err
+	return nil
+}
+
+func EnsureDirectoryBehavior(f cafs.Filestore) error {
+	file := cafs.NewMemdir("/a",
+		cafs.NewMemfileBytes("b.txt", []byte("a")),
+		cafs.NewMemdir("c",
+			cafs.NewMemfileBytes("d.txt", []byte("d")),
+		),
+		cafs.NewMemfileBytes("e.txt", []byte("e")),
+	)
+	key, err := f.Put(file, false)
+	if err != nil {
+		return fmt.Errorf("Filestore.Put(%s) error: %s", file.FileName(), err.Error())
+	}
+
+	outf, err := f.Get(key)
+	if err != nil {
+		return fmt.Errorf("Filestore.Get(%s) error: %s", key.String(), err.Error())
+	}
+
+	expectPaths := []string{
+		"/a",
+		"/a/b.txt",
+		"/a/c",
+		"/a/c/d.txt",
+		"/a/e.txt",
+	}
+
+	paths := []string{}
+	cafs.Walk(outf, 0, func(f cafs.File, depth int) error {
+		paths = append(paths, f.FullPath())
+		return nil
+	})
+
+	if len(paths) != len(expectPaths) {
+		return fmt.Errorf("path length mismatch. expected: %d, got %d", len(expectPaths), len(paths))
+	}
+
+	for i, p := range expectPaths {
+		if paths[i] != p {
+			return fmt.Errorf("path %d mismatch expected: %s, got: %s", i, p, paths[i])
+		}
+	}
+
+	if err = f.Delete(key); err != nil {
+		return fmt.Errorf("Filestore.Delete(%s) error: %s", key.String(), err.Error())
 	}
 
 	return nil
 }
 
-func RunFilestoreAdderTests(f cafs.Filestore) error {
+func EnsureFilestoreAdderBehavior(f cafs.Filestore) error {
 	adder, err := f.NewAdder(false, false)
 	if err != nil {
 		return fmt.Errorf("Filestore.NewAdder(false,false) error: %s", err.Error())
