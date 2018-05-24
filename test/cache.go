@@ -12,18 +12,18 @@ func RunCacheTests(cf cafs.NewCacheFunc, t *testing.T) {
 	fs := cafs.NewMapstore()
 	cache := cf(fs)
 
-	Filestore(cf, t)
+	TestFilestore(cf, t)
 
 	for _, test := range []func(cafs.Cache, *testing.T){
-		File,
-		Directory,
-		Adder,
+		TestFile,
+		TestDirectory,
+		TestAdder,
 	} {
 		test(cache, t)
 	}
 }
 
-func Filestore(cf cafs.NewCacheFunc, t *testing.T) {
+func TestFilestore(cf cafs.NewCacheFunc, t *testing.T) {
 	key := datastore.NewKey("/foo")
 	mf := cafs.NewMemfileBytes("foo", []byte("foo"))
 	mem := cafs.NewMapstore()
@@ -40,7 +40,7 @@ func Filestore(cf cafs.NewCacheFunc, t *testing.T) {
 	}
 }
 
-func File(cache cafs.Cache, t *testing.T) {
+func TestFile(cache cafs.Cache, t *testing.T) {
 	fs := cache.Filestore()
 	fdata := []byte("foo")
 	file := cafs.NewMemfileBytes("file.txt", fdata)
@@ -81,10 +81,10 @@ func File(cache cafs.Cache, t *testing.T) {
 	}
 }
 
-func Directory(cache cafs.Cache, t *testing.T) {
+func TestDirectory(cache cafs.Cache, t *testing.T) {
 	// TODO :/
 }
 
-func Adder(cache cafs.Cache, t *testing.T) {
+func TestAdder(cache cafs.Cache, t *testing.T) {
 	// TODO :/
 }

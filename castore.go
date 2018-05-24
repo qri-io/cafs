@@ -82,6 +82,7 @@ var (
 
 // Pinner interface for content stores that support
 // the concept of pinning (originated by IPFS).
+// Necessarily asynchronous, with no stateful guarantees, currently not testable.
 type Pinner interface {
 	Pin(key datastore.Key, recursive bool) error
 	Unpin(key datastore.Key, recursive bool) error
