@@ -24,6 +24,7 @@ import (
 var log = logging.Logger("cafs/ipfs")
 
 type Filestore struct {
+	cfg  *StoreCfg
 	node *core.IpfsNode
 }
 
@@ -53,12 +54,32 @@ func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 	}
 
 	return &Filestore{
+		cfg:  cfg,
 		node: node,
 	}, nil
 }
 
 func (fs *Filestore) Node() *core.IpfsNode {
 	return fs.node
+}
+
+func (fs *Filestore) Online() bool {
+	return fs.node.OnlineMode()
+}
+
+func (fs *Filestore) GoOnline() error {
+	cfg := fs.cfg
+	cfg.BuildCfg.Online = true
+	node, err := core.NewNode(cfg.Ctx, &cfg.BuildCfg)
+	if err != nil {
+		return fmt.Errorf("error creating ipfs node: %s\n", err.Error())
+	}
+
+	*fs = Filestore{
+		cfg:  cfg,
+		node: node,
+	}
+	return nil
 }
 
 func (fs *Filestore) Has(key datastore.Key) (exists bool, err error) {
