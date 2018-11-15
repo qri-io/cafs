@@ -8,6 +8,13 @@ import (
 	datastore "github.com/ipfs/go-datastore"
 	logging "github.com/ipfs/go-log"
 	cafs "github.com/qri-io/cafs"
+
+	// Note coreunix is forked form github.com/ipfs/go-ipfs/core/coreunix
+	// we need coreunix.Adder.addFile to be exported to get access to dags while
+	// they're being created. We should be able to remove this with refactoring &
+	// moving toward coreapi.coreUnix().Add() with properly-configured options,
+	// but I'd like a test before we do that. We may also want to consider switching
+	// Qri to writing IPLD. Lots to think about.
 	coreunix "github.com/qri-io/cafs/ipfs/coreunix"
 
 	path "gx/ipfs/QmT3rzed1ppXefourpmoZ7tyVQfsGPQZ1pHDngLmCvXxd3/go-path"
@@ -159,8 +166,6 @@ func (a *Adder) Close() error {
 func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 	node := fs.node
 	ctx := context.Background()
-	// bserv := blockservice.New(node.Blockstore, node.Exchange)
-	// dagserv := dag.NewDAGService(bserv)
 
 	a, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, node.DAG)
 	if err != nil {
@@ -210,9 +215,6 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) {
 	node := fs.Node()
 	ctx := context.Background()
-
-	// bserv := blockservice.New(node.Blockstore, node.Exchange)
-	// dagserv := dag.NewDAGService(bserv)
 
 	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, node.DAG)
 	fileAdder.Pin = pin
