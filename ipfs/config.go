@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/core"
-	fsrepo "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/repo/fsrepo"
+	"gx/ipfs/QmUJYo4etAQqFfSS2rarFAE97eNGB8ej64YkRT2SmsYD4r/go-ipfs/core"
+	fsrepo "gx/ipfs/QmUJYo4etAQqFfSS2rarFAE97eNGB8ej64YkRT2SmsYD4r/go-ipfs/repo/fsrepo"
 )
 
 var ErrIPFSRepoNeedsMigration = fmt.Errorf(`Your IPFS repo needs an update!
@@ -30,7 +30,7 @@ type StoreCfg struct {
 	Ctx context.Context
 }
 
-// Default configuration results in a local node that
+// DefaultConfig results in a local node that
 // attempts to draw from the default ipfs filesotre location
 func DefaultConfig() *StoreCfg {
 	return &StoreCfg{

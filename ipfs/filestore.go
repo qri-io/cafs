@@ -1,7 +1,6 @@
 package ipfs_filestore
 
 import (
-	"archive/tar"
 	"context"
 	"fmt"
 	"io"
@@ -9,16 +8,15 @@ import (
 	datastore "github.com/ipfs/go-datastore"
 	logging "github.com/ipfs/go-log"
 	cafs "github.com/qri-io/cafs"
+	coreunix "github.com/qri-io/cafs/ipfs/coreunix"
 
-	files "gx/ipfs/QmdE4gMduCKCGAcczM2F5ioYDfdeKuPix138wrES1YSr7f/go-ipfs-cmdkit/files"
-	blockservice "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/blockservice"
-	core "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/core"
-	corerepo "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/core/corerepo"
-	coreunix "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/core/coreunix"
-	dag "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/merkledag"
-	path "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/path"
-	uarchive "gx/ipfs/QmebqVUQQqQFhg74FtQFszUJo22Vpr3e8qBAkvvV4ho9HH/go-ipfs/unixfs/archive"
-	ipfsds "gx/ipfs/QmeiCcJfDW1GJnWUArudsv5rQsihpi4oyddPhdqo3CfX6i/go-datastore"
+	path "gx/ipfs/QmT3rzed1ppXefourpmoZ7tyVQfsGPQZ1pHDngLmCvXxd3/go-path"
+	core "gx/ipfs/QmUJYo4etAQqFfSS2rarFAE97eNGB8ej64YkRT2SmsYD4r/go-ipfs/core"
+	coreapi "gx/ipfs/QmUJYo4etAQqFfSS2rarFAE97eNGB8ej64YkRT2SmsYD4r/go-ipfs/core/coreapi"
+	coreiface "gx/ipfs/QmUJYo4etAQqFfSS2rarFAE97eNGB8ej64YkRT2SmsYD4r/go-ipfs/core/coreapi/interface"
+	corerepo "gx/ipfs/QmUJYo4etAQqFfSS2rarFAE97eNGB8ej64YkRT2SmsYD4r/go-ipfs/core/corerepo"
+	files "gx/ipfs/QmZMWMvWMVKCbHetJ4RgndbuEF1io2UpUxwQwtNjtYPzSC/go-ipfs-files"
+	ipfsds "gx/ipfs/QmaRb5yNXKonhbkpNxNawoydk4N6es6b4fPj19sjEKsh5D/go-datastore"
 )
 
 var log = logging.Logger("cafs/ipfs")
@@ -26,6 +24,7 @@ var log = logging.Logger("cafs/ipfs")
 type Filestore struct {
 	cfg  *StoreCfg
 	node *core.IpfsNode
+	capi coreiface.CoreAPI
 }
 
 func (f Filestore) PathPrefix() string {
@@ -56,6 +55,7 @@ func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 	return &Filestore{
 		cfg:  cfg,
 		node: node,
+		capi: coreapi.NewCoreAPI(node),
 	}, nil
 }
 
@@ -84,19 +84,12 @@ func (fs *Filestore) GoOnline() error {
 
 func (fs *Filestore) Has(key datastore.Key) (exists bool, err error) {
 	ipfskey := ipfsds.NewKey(key.String())
-	// TODO - we'll need a "local" list for this to work properly
-	// currently this thing is *always* going to check the d.web for
-	// a hash if it's online, which is a behaviour we need control over
-	// might be worth expanding the cafs interface with the concept of
-	// remote gets
-	// update 2017-10-23 - we now have a fetch interface, integrate? is it integrated?
+
 	if _, err = core.Resolve(fs.node.Context(), fs.node.Namesys, fs.node.Resolver, path.Path(ipfskey.String())); err != nil {
 		// TODO - return error here?
 		return false, nil
 	}
 
-	// I had hoped this would work, it doesn't.
-	// fs.Node().Repo.Datastore().Has(ipfskey)
 	return true, nil
 }
 
@@ -130,34 +123,15 @@ func (fs *Filestore) Delete(path datastore.Key) error {
 }
 
 func (fs *Filestore) getKey(key datastore.Key) (cafs.File, error) {
-	p := path.Path(key.String())
-	node := fs.node
-
-	// TODO - we'll need a "local" list for this to work properly
-	// currently this thing is *always* going to check the d.web for
-	// a hash if it's online, which is a behaviour we need control over
-	// might be worth expanding the cafs interface with the concept of
-	// remote gets
-	// update 2017-10-23 - we now have a fetch interface, integrate? is it integrated?
-	dn, err := core.Resolve(node.Context(), node.Namesys, node.Resolver, p)
+	path, err := coreiface.ParsePath(key.String())
 	if err != nil {
-		return nil, fmt.Errorf("error resolving hash: %s", err.Error())
+		return nil, err
 	}
-
-	r, err := uarchive.DagArchive(node.Context(), dn, p.String(), node.DAG, false, 0)
+	file, err := fs.capi.Unixfs().Get(fs.node.Context(), path)
 	if err != nil {
-		return nil, fmt.Errorf("error unarchiving DAG: %s", err.Error())
+		return nil, err
 	}
-
-	tr := tar.NewReader(r)
-
-	// call next to set cursor at first file
-	_, err = tr.Next()
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("tar archive error: %s", err.Error())
-	}
-
-	return cafs.NewMemfileReader(key.String(), tr), nil
+	return cafs.NewMemfileReader(file.FileName(), file), nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface
@@ -183,12 +157,12 @@ func (a *Adder) Close() error {
 }
 
 func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
-	node := fs.Node()
+	node := fs.node
 	ctx := context.Background()
-	bserv := blockservice.New(node.Blockstore, node.Exchange)
-	dagserv := dag.NewDAGService(bserv)
+	// bserv := blockservice.New(node.Blockstore, node.Exchange)
+	// dagserv := dag.NewDAGService(bserv)
 
-	a, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
+	a, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, node.DAG)
 	if err != nil {
 		return nil, fmt.Errorf("error allocating adder: %s", err.Error())
 	}
@@ -204,7 +178,7 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 			select {
 			case out, ok := <-outChan:
 				if ok {
-					output := out.(*coreunix.AddedObject)
+					output := out.(*coreiface.AddEvent)
 					if len(output.Hash) > 0 {
 						added <- cafs.AddedFile{
 							Path:  datastore.NewKey("/ipfs/" + output.Hash),
@@ -232,15 +206,15 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 	}, nil
 }
 
-// AddAndPinBytes adds a file to the top level IPFS Node
+// AddFile adds a file to the top level IPFS Node
 func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) {
 	node := fs.Node()
-
 	ctx := context.Background()
-	bserv := blockservice.New(node.Blockstore, node.Exchange)
-	dagserv := dag.NewDAGService(bserv)
 
-	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, dagserv)
+	// bserv := blockservice.New(node.Blockstore, node.Exchange)
+	// dagserv := dag.NewDAGService(bserv)
+
+	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, node.DAG)
 	fileAdder.Pin = pin
 	fileAdder.Wrap = file.IsDirectory()
 	if err != nil {
@@ -291,7 +265,7 @@ func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) 
 			if !ok {
 				return
 			}
-			output := out.(*coreunix.AddedObject)
+			output := out.(*coreiface.AddEvent)
 			if len(output.Hash) > 0 {
 				hash = output.Hash
 				// return
@@ -307,12 +281,12 @@ func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) 
 }
 
 func (fs *Filestore) Pin(path datastore.Key, recursive bool) error {
-	_, err := corerepo.Pin(fs.node, fs.node.Context(), []string{path.String()}, recursive)
+	_, err := corerepo.Pin(fs.node, fs.capi, fs.node.Context(), []string{path.String()}, recursive)
 	return err
 }
 
 func (fs *Filestore) Unpin(path datastore.Key, recursive bool) error {
-	_, err := corerepo.Unpin(fs.node, fs.node.Context(), []string{path.String()}, recursive)
+	_, err := corerepo.Unpin(fs.node, fs.capi, fs.node.Context(), []string{path.String()}, recursive)
 	return err
 }
 
