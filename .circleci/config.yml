@@ -32,6 +32,7 @@ jobs:
             github.com/spaolacci/murmur3
             golang.org/x/crypto/blake2b
             cloud.google.com/go/storage
+            github.com/ipfs/go-log
       - restore_cache:
           key: dependency-cache-{{ checksum "package.json" }}
       - run:
