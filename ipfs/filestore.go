@@ -46,7 +46,9 @@ func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
 
 	if cfg.Node != nil {
 		return &Filestore{
+			cfg:  cfg,
 			node: cfg.Node,
+			capi: coreapi.NewCoreAPI(cfg.Node),
 		}, nil
 	}
 
@@ -85,6 +87,7 @@ func (fs *Filestore) GoOnline() error {
 	*fs = Filestore{
 		cfg:  cfg,
 		node: node,
+		capi: coreapi.NewCoreAPI(node),
 	}
 	return nil
 }
