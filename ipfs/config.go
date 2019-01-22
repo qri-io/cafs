@@ -28,6 +28,8 @@ type StoreCfg struct {
 	FsRepoPath string
 	// operating context
 	Ctx context.Context
+	// EnableAPI
+	EnableAPI bool
 }
 
 // DefaultConfig results in a local node that
@@ -39,6 +41,37 @@ func DefaultConfig() *StoreCfg {
 		},
 		FsRepoPath: "~/.ipfs",
 		Ctx:        context.Background(),
+	}
+}
+
+// Option is a function that adjusts the store configuration
+type Option func(o *StoreCfg)
+
+// OptEnablePubSub configures ipfs to use the experimental pubsub store
+func OptEnablePubSub(o *StoreCfg) {
+	o.BuildCfg.ExtraOpts = map[string]bool{
+		"pubsub": true,
+	}
+}
+
+// OptsFromMap detects options from a map based on special keywords
+func OptsFromMap(opts map[string]interface{}) Option {
+	return func(o *StoreCfg) {
+		if opts == nil {
+			return
+		}
+
+		if api, ok := opts["api"].(bool); ok {
+			o.EnableAPI = api
+		}
+
+		if ps, ok := opts["pubsub"].(bool); ok {
+			if o.BuildCfg.ExtraOpts == nil {
+				o.BuildCfg.ExtraOpts = map[string]bool{}
+			}
+			o.BuildCfg.ExtraOpts["pubsub"] = ps
+		}
+
 	}
 }
 

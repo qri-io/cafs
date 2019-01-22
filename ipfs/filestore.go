@@ -38,7 +38,7 @@ func (f Filestore) PathPrefix() string {
 	return "ipfs"
 }
 
-func NewFilestore(config ...func(cfg *StoreCfg)) (*Filestore, error) {
+func NewFilestore(config ...Option) (*Filestore, error) {
 	cfg := DefaultConfig()
 	for _, option := range config {
 		option(cfg)
@@ -89,6 +89,15 @@ func (fs *Filestore) GoOnline() error {
 		node: node,
 		capi: coreapi.NewCoreAPI(node),
 	}
+
+	if cfg.EnableAPI {
+		go func() {
+			if err := fs.serveAPI(); err != nil {
+				log.Errorf("error serving IPFS HTTP api: %s", err)
+			}
+		}()
+	}
+
 	return nil
 }
 
