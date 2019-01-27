@@ -6,13 +6,12 @@
 package cafs
 
 import (
-	"fmt"
-
-	"github.com/ipfs/go-datastore"
+	"errors"
 )
 
 var (
-	ErrNotFound = fmt.Errorf("cafs: Not Found")
+	// ErrNotFound is the canonical error for not finding a value
+	ErrNotFound = errors.New("cafs: path not found")
 )
 
 // Filestore is an interface for working with a content-addressed file system.
@@ -25,20 +24,20 @@ type Filestore interface {
 	// the resulting key (google "content addressing" for more info ;)
 	// keys returned by put must be prefixed with the PathPrefix,
 	// eg. /ipfs/QmZ3KfGaSrb3cnTriJbddCzG7hwQi2j6km7Xe7hVpnsW5S
-	Put(file File, pin bool) (key datastore.Key, err error)
+	Put(file File, pin bool) (key string, err error)
 
 	// Get retrieves the object `value` named by `key`.
 	// Get will return ErrNotFound if the key is not mapped to a value.
-	Get(key datastore.Key) (file File, err error)
+	Get(key string) (file File, err error)
 
 	// Has returns whether the `key` is mapped to a `value`.
 	// In some contexts, it may be much cheaper only to check for existence of
 	// a value, rather than retrieving the value itself. (e.g. HTTP HEAD).
 	// The default implementation is found in `GetBackedHas`.
-	Has(key datastore.Key) (exists bool, err error)
+	Has(key string) (exists bool, err error)
 
 	// Delete removes the value for given `key`.
-	Delete(key datastore.Key) error
+	Delete(key string) error
 
 	// NewAdder allocates an Adder instance for adding files to the filestore
 	// Adder gives a higher degree of control over the file adding process at the
@@ -59,7 +58,7 @@ type Filestore interface {
 // filestores can opt into the fetcher interface
 type Fetcher interface {
 	// Fetch gets a file from a source
-	Fetch(source Source, key datastore.Key) (File, error)
+	Fetch(source Source, key string) (File, error)
 }
 
 // Source identifies where a file should come from.
@@ -84,8 +83,8 @@ var (
 // the concept of pinning (originated by IPFS).
 // Necessarily asynchronous, with no stateful guarantees, currently not testable.
 type Pinner interface {
-	Pin(key datastore.Key, recursive bool) error
-	Unpin(key datastore.Key, recursive bool) error
+	Pin(key string, recursive bool) error
+	Unpin(key string, recursive bool) error
 }
 
 // Adder is the interface for adding files to a Filestore. The addition process
@@ -108,7 +107,7 @@ type Adder interface {
 // AddedFile reports on the results of adding a file to the store
 // TODO - add filepath to this struct
 type AddedFile struct {
-	Path  datastore.Key
+	Path  string
 	Name  string
 	Bytes int64
 	Hash  string
