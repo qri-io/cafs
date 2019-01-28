@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	datastore "github.com/ipfs/go-datastore"
 	logging "github.com/ipfs/go-log"
 	cafs "github.com/qri-io/cafs"
 
@@ -28,6 +27,8 @@ import (
 
 var log = logging.Logger("cafs/ipfs")
 
+const prefix = "ipfs"
+
 type Filestore struct {
 	cfg  *StoreCfg
 	node *core.IpfsNode
@@ -35,7 +36,7 @@ type Filestore struct {
 }
 
 func (f Filestore) PathPrefix() string {
-	return "ipfs"
+	return prefix
 }
 
 func NewFilestore(config ...Option) (*Filestore, error) {
@@ -101,8 +102,8 @@ func (fs *Filestore) GoOnline() error {
 	return nil
 }
 
-func (fs *Filestore) Has(key datastore.Key) (exists bool, err error) {
-	ipfskey := ipfsds.NewKey(key.String())
+func (fs *Filestore) Has(key string) (exists bool, err error) {
+	ipfskey := ipfsds.NewKey(key)
 
 	if _, err = core.Resolve(fs.node.Context(), fs.node.Namesys, fs.node.Resolver, path.Path(ipfskey.String())); err != nil {
 		// TODO - return error here?
@@ -112,27 +113,26 @@ func (fs *Filestore) Has(key datastore.Key) (exists bool, err error) {
 	return true, nil
 }
 
-func (fs *Filestore) Get(key datastore.Key) (cafs.File, error) {
-	// fs.Node().Repo.Datastore().Get(key)
+func (fs *Filestore) Get(key string) (cafs.File, error) {
 	return fs.getKey(key)
 }
 
-func (fs *Filestore) Fetch(source cafs.Source, key datastore.Key) (cafs.File, error) {
+func (fs *Filestore) Fetch(source cafs.Source, key string) (cafs.File, error) {
 	return fs.getKey(key)
 }
 
-func (fs *Filestore) Put(file cafs.File, pin bool) (key datastore.Key, err error) {
+func (fs *Filestore) Put(file cafs.File, pin bool) (key string, err error) {
 	hash, err := fs.AddFile(file, pin)
 	if err != nil {
 		log.Infof("error adding bytes: %s", err.Error())
 		return
 	}
-	return datastore.NewKey("/ipfs/" + hash), nil
+	return pathFromHash(hash), nil
 }
 
-func (fs *Filestore) Delete(path datastore.Key) error {
+func (fs *Filestore) Delete(key string) error {
 	// TODO - formally remove files?
-	err := fs.Unpin(path, true)
+	err := fs.Unpin(key, true)
 	if err != nil {
 		if err.Error() == "not pinned" {
 			return nil
@@ -141,8 +141,8 @@ func (fs *Filestore) Delete(path datastore.Key) error {
 	return nil
 }
 
-func (fs *Filestore) getKey(key datastore.Key) (cafs.File, error) {
-	path, err := coreiface.ParsePath(key.String())
+func (fs *Filestore) getKey(key string) (cafs.File, error) {
+	path, err := coreiface.ParsePath(key)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +198,7 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 					output := out.(*coreiface.AddEvent)
 					if len(output.Hash) > 0 {
 						added <- cafs.AddedFile{
-							Path:  datastore.NewKey("/ipfs/" + output.Hash),
+							Path:  pathFromHash(output.Hash),
 							Name:  output.Name,
 							Hash:  output.Hash,
 							Bytes: output.Bytes,
@@ -221,6 +221,10 @@ func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
 		out:   outChan,
 		added: added,
 	}, nil
+}
+
+func pathFromHash(hash string) string {
+	return fmt.Sprintf("/%s/%s", prefix, hash)
 }
 
 // AddFile adds a file to the top level IPFS Node
@@ -294,13 +298,13 @@ func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) 
 	return
 }
 
-func (fs *Filestore) Pin(path datastore.Key, recursive bool) error {
-	_, err := corerepo.Pin(fs.node, fs.capi, fs.node.Context(), []string{path.String()}, recursive)
+func (fs *Filestore) Pin(path string, recursive bool) error {
+	_, err := corerepo.Pin(fs.node, fs.capi, fs.node.Context(), []string{path}, recursive)
 	return err
 }
 
-func (fs *Filestore) Unpin(path datastore.Key, recursive bool) error {
-	_, err := corerepo.Unpin(fs.node, fs.capi, fs.node.Context(), []string{path.String()}, recursive)
+func (fs *Filestore) Unpin(path string, recursive bool) error {
+	_, err := corerepo.Unpin(fs.node, fs.capi, fs.node.Context(), []string{path}, recursive)
 	return err
 }
 

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"strings"
 
-	"github.com/ipfs/go-datastore"
 	"github.com/qri-io/cafs"
 )
 
@@ -28,13 +28,13 @@ func EnsureFilestoreSingleFileBehavior(f cafs.Filestore) error {
 	}
 
 	pre := "/" + f.PathPrefix() + "/"
-	if key.String()[:len(pre)] != pre {
-		return fmt.Errorf("key returned didn't return a that matches this Filestore's PathPrefix. Expected: %s/..., got: %s", pre, key.String())
+	if !strings.HasPrefix(key, pre) {
+		return fmt.Errorf("key returned didn't return a that matches this Filestore's PathPrefix. Expected: %s/..., got: %s", pre, key)
 	}
 
 	outf, err := f.Get(key)
 	if err != nil {
-		return fmt.Errorf("Filestore.Get(%s) error: %s", key.String(), err.Error())
+		return fmt.Errorf("Filestore.Get(%s) error: %s", key, err.Error())
 	}
 	data, err := ioutil.ReadAll(outf)
 	if err != nil {
@@ -45,7 +45,7 @@ func EnsureFilestoreSingleFileBehavior(f cafs.Filestore) error {
 		// return fmt.Errorf("mismatched return value from get: %s != %s", outf.FileName(), string(data))
 	}
 
-	has, err := f.Has(datastore.NewKey("no-match"))
+	has, err := f.Has("no-match")
 	if err != nil {
 		return fmt.Errorf("Filestore.Has([nonexistent key]) error: %s", err.Error())
 	}
@@ -56,13 +56,13 @@ func EnsureFilestoreSingleFileBehavior(f cafs.Filestore) error {
 	// TODO - need to restore this, currently it'll make ipfs filestore tests fail
 	has, err = f.Has(key)
 	if err != nil {
-		return fmt.Errorf("Filestore.Has(%s) error: %s", key.String(), err.Error())
+		return fmt.Errorf("Filestore.Has(%s) error: %s", key, err.Error())
 	}
 	if !has {
-		return fmt.Errorf("Filestore.Has(%s) should have returned true", key.String())
+		return fmt.Errorf("Filestore.Has(%s) should have returned true", key)
 	}
 	if err = f.Delete(key); err != nil {
-		return fmt.Errorf("Filestore.Delete(%s) error: %s", key.String(), err.Error())
+		return fmt.Errorf("Filestore.Delete(%s) error: %s", key, err.Error())
 	}
 
 	return nil
@@ -83,7 +83,7 @@ func EnsureDirectoryBehavior(f cafs.Filestore) error {
 
 	outf, err := f.Get(key)
 	if err != nil {
-		return fmt.Errorf("Filestore.Get(%s) error: %s", key.String(), err.Error())
+		return fmt.Errorf("Filestore.Get(%s) error: %s", key, err.Error())
 	}
 
 	expectPaths := []string{
@@ -111,7 +111,7 @@ func EnsureDirectoryBehavior(f cafs.Filestore) error {
 	}
 
 	if err = f.Delete(key); err != nil {
-		return fmt.Errorf("Filestore.Delete(%s) error: %s", key.String(), err.Error())
+		return fmt.Errorf("Filestore.Delete(%s) error: %s", key, err.Error())
 	}
 
 	return nil
