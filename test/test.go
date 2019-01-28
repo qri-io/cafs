@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io/ioutil"
+	"strings"
 
 	"github.com/qri-io/cafs"
 )
@@ -27,7 +28,7 @@ func EnsureFilestoreSingleFileBehavior(f cafs.Filestore) error {
 	}
 
 	pre := "/" + f.PathPrefix() + "/"
-	if key[:len(pre)] != pre {
+	if !strings.HasPrefix(key, pre) {
 		return fmt.Errorf("key returned didn't return a that matches this Filestore's PathPrefix. Expected: %s/..., got: %s", pre, key)
 	}
 
