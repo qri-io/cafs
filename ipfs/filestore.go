@@ -7,6 +7,7 @@ import (
 
 	logging "github.com/ipfs/go-log"
 	cafs "github.com/qri-io/cafs"
+	"github.com/qri-io/fs"
 
 	// Note coreunix is forked form github.com/ipfs/go-ipfs/core/coreunix
 	// we need coreunix.Adder.addFile to be exported to get access to dags while
@@ -35,7 +36,7 @@ type Filestore struct {
 	capi coreiface.CoreAPI
 }
 
-func (f Filestore) PathPrefix() string {
+func (fst Filestore) PathPrefix() string {
 	return prefix
 }
 
@@ -69,23 +70,23 @@ func NewFilestore(config ...Option) (*Filestore, error) {
 	}, nil
 }
 
-func (fs *Filestore) Node() *core.IpfsNode {
-	return fs.node
+func (fst *Filestore) Node() *core.IpfsNode {
+	return fst.node
 }
 
-func (fs *Filestore) Online() bool {
-	return fs.node.OnlineMode()
+func (fst *Filestore) Online() bool {
+	return fst.node.OnlineMode()
 }
 
-func (fs *Filestore) GoOnline() error {
-	cfg := fs.cfg
+func (fst *Filestore) GoOnline() error {
+	cfg := fst.cfg
 	cfg.BuildCfg.Online = true
 	node, err := core.NewNode(cfg.Ctx, &cfg.BuildCfg)
 	if err != nil {
 		return fmt.Errorf("error creating ipfs node: %s\n", err.Error())
 	}
 
-	*fs = Filestore{
+	*fst = Filestore{
 		cfg:  cfg,
 		node: node,
 		capi: coreapi.NewCoreAPI(node),
@@ -93,7 +94,7 @@ func (fs *Filestore) GoOnline() error {
 
 	if cfg.EnableAPI {
 		go func() {
-			if err := fs.serveAPI(); err != nil {
+			if err := fst.serveAPI(); err != nil {
 				log.Errorf("error serving IPFS HTTP api: %s", err)
 			}
 		}()
@@ -102,10 +103,10 @@ func (fs *Filestore) GoOnline() error {
 	return nil
 }
 
-func (fs *Filestore) Has(key string) (exists bool, err error) {
+func (fst *Filestore) Has(key string) (exists bool, err error) {
 	ipfskey := ipfsds.NewKey(key)
 
-	if _, err = core.Resolve(fs.node.Context(), fs.node.Namesys, fs.node.Resolver, path.Path(ipfskey.String())); err != nil {
+	if _, err = core.Resolve(fst.node.Context(), fst.node.Namesys, fst.node.Resolver, path.Path(ipfskey.String())); err != nil {
 		// TODO - return error here?
 		return false, nil
 	}
@@ -113,16 +114,16 @@ func (fs *Filestore) Has(key string) (exists bool, err error) {
 	return true, nil
 }
 
-func (fs *Filestore) Get(key string) (cafs.File, error) {
-	return fs.getKey(key)
+func (fst *Filestore) Get(key string) (fs.File, error) {
+	return fst.getKey(key)
 }
 
-func (fs *Filestore) Fetch(source cafs.Source, key string) (cafs.File, error) {
-	return fs.getKey(key)
+func (fst *Filestore) Fetch(source cafs.Source, key string) (fs.File, error) {
+	return fst.getKey(key)
 }
 
-func (fs *Filestore) Put(file cafs.File, pin bool) (key string, err error) {
-	hash, err := fs.AddFile(file, pin)
+func (fst *Filestore) Put(file fs.File, pin bool) (key string, err error) {
+	hash, err := fst.AddFile(file, pin)
 	if err != nil {
 		log.Infof("error adding bytes: %s", err.Error())
 		return
@@ -130,9 +131,8 @@ func (fs *Filestore) Put(file cafs.File, pin bool) (key string, err error) {
 	return pathFromHash(hash), nil
 }
 
-func (fs *Filestore) Delete(key string) error {
-	// TODO - formally remove files?
-	err := fs.Unpin(key, true)
+func (fst *Filestore) Delete(key string) error {
+	err := fst.Unpin(key, true)
 	if err != nil {
 		if err.Error() == "not pinned" {
 			return nil
@@ -141,16 +141,16 @@ func (fs *Filestore) Delete(key string) error {
 	return nil
 }
 
-func (fs *Filestore) getKey(key string) (cafs.File, error) {
+func (fst *Filestore) getKey(key string) (fs.File, error) {
 	path, err := coreiface.ParsePath(key)
 	if err != nil {
 		return nil, err
 	}
-	file, err := fs.capi.Unixfs().Get(fs.node.Context(), path)
+	file, err := fst.capi.Unixfs().Get(fst.node.Context(), path)
 	if err != nil {
 		return nil, err
 	}
-	return cafs.NewMemfileReader(file.FileName(), file), nil
+	return fs.NewMemfileReader(file.FileName(), file), nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface
@@ -160,7 +160,7 @@ type Adder struct {
 	added chan cafs.AddedFile
 }
 
-func (a *Adder) AddFile(f cafs.File) error {
+func (a *Adder) AddFile(f fs.File) error {
 	return a.adder.AddFile(wrapFile{f})
 }
 func (a *Adder) Added() chan cafs.AddedFile {
@@ -175,8 +175,8 @@ func (a *Adder) Close() error {
 	return a.adder.PinRoot()
 }
 
-func (fs *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
-	node := fs.node
+func (fst *Filestore) NewAdder(pin, wrap bool) (cafs.Adder, error) {
+	node := fst.node
 	ctx := context.Background()
 
 	a, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, node.DAG)
@@ -228,8 +228,8 @@ func pathFromHash(hash string) string {
 }
 
 // AddFile adds a file to the top level IPFS Node
-func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) {
-	node := fs.Node()
+func (fst *Filestore) AddFile(file fs.File, pin bool) (hash string, err error) {
+	node := fst.Node()
 	ctx := context.Background()
 
 	fileAdder, err := coreunix.NewAdder(ctx, node.Pinning, node.Blockstore, node.DAG)
@@ -242,7 +242,7 @@ func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) 
 
 	// wrap in a folder if top level is a file
 	if !file.IsDirectory() {
-		file = cafs.NewMemdir("/", file)
+		file = fs.NewMemdir("/", file)
 	}
 
 	errChan := make(chan error, 0)
@@ -298,18 +298,18 @@ func (fs *Filestore) AddFile(file cafs.File, pin bool) (hash string, err error) 
 	return
 }
 
-func (fs *Filestore) Pin(path string, recursive bool) error {
-	_, err := corerepo.Pin(fs.node, fs.capi, fs.node.Context(), []string{path}, recursive)
+func (fst *Filestore) Pin(path string, recursive bool) error {
+	_, err := corerepo.Pin(fst.node, fst.capi, fst.node.Context(), []string{path}, recursive)
 	return err
 }
 
-func (fs *Filestore) Unpin(path string, recursive bool) error {
-	_, err := corerepo.Unpin(fs.node, fs.capi, fs.node.Context(), []string{path}, recursive)
+func (fst *Filestore) Unpin(path string, recursive bool) error {
+	_, err := corerepo.Unpin(fst.node, fst.capi, fst.node.Context(), []string{path}, recursive)
 	return err
 }
 
 type wrapFile struct {
-	cafs.File
+	fs.File
 }
 
 func (w wrapFile) NextFile() (files.File, error) {

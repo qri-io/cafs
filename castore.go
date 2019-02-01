@@ -7,6 +7,8 @@ package cafs
 
 import (
 	"errors"
+
+	"github.com/qri-io/fs"
 )
 
 var (
@@ -24,11 +26,11 @@ type Filestore interface {
 	// the resulting key (google "content addressing" for more info ;)
 	// keys returned by put must be prefixed with the PathPrefix,
 	// eg. /ipfs/QmZ3KfGaSrb3cnTriJbddCzG7hwQi2j6km7Xe7hVpnsW5S
-	Put(file File, pin bool) (key string, err error)
+	Put(file fs.File, pin bool) (key string, err error)
 
 	// Get retrieves the object `value` named by `key`.
 	// Get will return ErrNotFound if the key is not mapped to a value.
-	Get(key string) (file File, err error)
+	Get(key string) (file fs.File, err error)
 
 	// Has returns whether the `key` is mapped to a `value`.
 	// In some contexts, it may be much cheaper only to check for existence of
@@ -58,7 +60,7 @@ type Filestore interface {
 // filestores can opt into the fetcher interface
 type Fetcher interface {
 	// Fetch gets a file from a source
-	Fetch(source Source, key string) (File, error)
+	Fetch(source Source, key string) (fs.File, error)
 }
 
 // Source identifies where a file should come from.
@@ -95,7 +97,7 @@ type Adder interface {
 	// AddFile adds a file or directory of files to the store
 	// this function will return immideately, consumers should read
 	// from the Added() channel to see the results of file addition.
-	AddFile(File) error
+	AddFile(fs.File) error
 	// Added gives a channel to read added files from.
 	Added() chan AddedFile
 	// In IPFS land close calls adder.Finalize() and adder.PinRoot()
@@ -112,29 +114,4 @@ type AddedFile struct {
 	Bytes int64
 	Hash  string
 	Size  string
-}
-
-// Walk traverses a file tree calling visit on each node
-func Walk(root File, depth int, visit func(f File, depth int) error) (err error) {
-	if err := visit(root, depth); err != nil {
-		return err
-	}
-
-	if root.IsDirectory() {
-		for {
-			f, err := root.NextFile()
-			if err != nil {
-				if err.Error() == "EOF" {
-					break
-				} else {
-					return err
-				}
-			}
-
-			if err := Walk(f, depth+1, visit); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
