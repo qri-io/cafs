@@ -8,7 +8,7 @@ package cafs
 import (
 	"errors"
 
-	"github.com/qri-io/fs"
+	"github.com/qri-io/qfs"
 )
 
 var (
@@ -26,11 +26,11 @@ type Filestore interface {
 	// the resulting key (google "content addressing" for more info ;)
 	// keys returned by put must be prefixed with the PathPrefix,
 	// eg. /ipfs/QmZ3KfGaSrb3cnTriJbddCzG7hwQi2j6km7Xe7hVpnsW5S
-	Put(file fs.File, pin bool) (key string, err error)
+	Put(file qfs.File, pin bool) (key string, err error)
 
 	// Get retrieves the object `value` named by `key`.
 	// Get will return ErrNotFound if the key is not mapped to a value.
-	Get(key string) (file fs.File, err error)
+	Get(key string) (file qfs.File, err error)
 
 	// Has returns whether the `key` is mapped to a `value`.
 	// In some contexts, it may be much cheaper only to check for existence of
@@ -60,7 +60,7 @@ type Filestore interface {
 // filestores can opt into the fetcher interface
 type Fetcher interface {
 	// Fetch gets a file from a source
-	Fetch(source Source, key string) (fs.File, error)
+	Fetch(source Source, key string) (qfs.File, error)
 }
 
 // Source identifies where a file should come from.
@@ -97,7 +97,7 @@ type Adder interface {
 	// AddFile adds a file or directory of files to the store
 	// this function will return immideately, consumers should read
 	// from the Added() channel to see the results of file addition.
-	AddFile(fs.File) error
+	AddFile(qfs.File) error
 	// Added gives a channel to read added files from.
 	Added() chan AddedFile
 	// In IPFS land close calls adder.Finalize() and adder.PinRoot()

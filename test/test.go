@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/qri-io/cafs"
+	"github.com/qri-io/qfs"
 )
 
 func EnsureFilestoreBehavior(f cafs.Filestore) error {
@@ -21,7 +22,7 @@ func EnsureFilestoreBehavior(f cafs.Filestore) error {
 
 func EnsureFilestoreSingleFileBehavior(f cafs.Filestore) error {
 	fdata := []byte("foo")
-	file := cafs.NewMemfileBytes("file.txt", fdata)
+	file := qfs.NewMemfileBytes("file.txt", fdata)
 	key, err := f.Put(file, false)
 	if err != nil {
 		return fmt.Errorf("Filestore.Put(%s) error: %s", file.FileName(), err.Error())
@@ -69,12 +70,12 @@ func EnsureFilestoreSingleFileBehavior(f cafs.Filestore) error {
 }
 
 func EnsureDirectoryBehavior(f cafs.Filestore) error {
-	file := cafs.NewMemdir("/a",
-		cafs.NewMemfileBytes("b.txt", []byte("a")),
-		cafs.NewMemdir("c",
-			cafs.NewMemfileBytes("d.txt", []byte("d")),
+	file := qfs.NewMemdir("/a",
+		qfs.NewMemfileBytes("b.txt", []byte("a")),
+		qfs.NewMemdir("c",
+			qfs.NewMemfileBytes("d.txt", []byte("d")),
 		),
-		cafs.NewMemfileBytes("e.txt", []byte("e")),
+		qfs.NewMemfileBytes("e.txt", []byte("e")),
 	)
 	key, err := f.Put(file, false)
 	if err != nil {
@@ -95,7 +96,7 @@ func EnsureDirectoryBehavior(f cafs.Filestore) error {
 	}
 
 	paths := []string{}
-	cafs.Walk(outf, 0, func(f cafs.File, depth int) error {
+	qfs.Walk(outf, 0, func(f qfs.File, depth int) error {
 		paths = append(paths, f.FullPath())
 		return nil
 	})
@@ -124,7 +125,7 @@ func EnsureFilestoreAdderBehavior(f cafs.Filestore) error {
 	}
 
 	data := []byte("bar")
-	if err := adder.AddFile(cafs.NewMemfileBytes("test.txt", data)); err != nil {
+	if err := adder.AddFile(qfs.NewMemfileBytes("test.txt", data)); err != nil {
 		return fmt.Errorf("Adder.AddFile error: %s", err.Error())
 	}
 

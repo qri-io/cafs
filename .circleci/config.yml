@@ -33,6 +33,7 @@ jobs:
             golang.org/x/crypto/blake2b
             cloud.google.com/go/storage
             github.com/ipfs/go-log
+            github.com/qri-io/qfs
       - restore_cache:
           key: dependency-cache-{{ checksum "package.json" }}
       - run:

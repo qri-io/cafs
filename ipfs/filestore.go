@@ -7,7 +7,7 @@ import (
 
 	logging "github.com/ipfs/go-log"
 	cafs "github.com/qri-io/cafs"
-	"github.com/qri-io/fs"
+	"github.com/qri-io/qfs"
 
 	// Note coreunix is forked form github.com/ipfs/go-ipfs/core/coreunix
 	// we need coreunix.Adder.addFile to be exported to get access to dags while
@@ -114,15 +114,15 @@ func (fst *Filestore) Has(key string) (exists bool, err error) {
 	return true, nil
 }
 
-func (fst *Filestore) Get(key string) (fs.File, error) {
+func (fst *Filestore) Get(key string) (qfs.File, error) {
 	return fst.getKey(key)
 }
 
-func (fst *Filestore) Fetch(source cafs.Source, key string) (fs.File, error) {
+func (fst *Filestore) Fetch(source cafs.Source, key string) (qfs.File, error) {
 	return fst.getKey(key)
 }
 
-func (fst *Filestore) Put(file fs.File, pin bool) (key string, err error) {
+func (fst *Filestore) Put(file qfs.File, pin bool) (key string, err error) {
 	hash, err := fst.AddFile(file, pin)
 	if err != nil {
 		log.Infof("error adding bytes: %s", err.Error())
@@ -141,7 +141,7 @@ func (fst *Filestore) Delete(key string) error {
 	return nil
 }
 
-func (fst *Filestore) getKey(key string) (fs.File, error) {
+func (fst *Filestore) getKey(key string) (qfs.File, error) {
 	path, err := coreiface.ParsePath(key)
 	if err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func (fst *Filestore) getKey(key string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return fs.NewMemfileReader(file.FileName(), file), nil
+	return qfs.NewMemfileReader(file.FileName(), file), nil
 }
 
 // Adder wraps a coreunix adder to conform to the cafs adder interface
@@ -160,7 +160,7 @@ type Adder struct {
 	added chan cafs.AddedFile
 }
 
-func (a *Adder) AddFile(f fs.File) error {
+func (a *Adder) AddFile(f qfs.File) error {
 	return a.adder.AddFile(wrapFile{f})
 }
 func (a *Adder) Added() chan cafs.AddedFile {
@@ -228,7 +228,7 @@ func pathFromHash(hash string) string {
 }
 
 // AddFile adds a file to the top level IPFS Node
-func (fst *Filestore) AddFile(file fs.File, pin bool) (hash string, err error) {
+func (fst *Filestore) AddFile(file qfs.File, pin bool) (hash string, err error) {
 	node := fst.Node()
 	ctx := context.Background()
 
@@ -242,7 +242,7 @@ func (fst *Filestore) AddFile(file fs.File, pin bool) (hash string, err error) {
 
 	// wrap in a folder if top level is a file
 	if !file.IsDirectory() {
-		file = fs.NewMemdir("/", file)
+		file = qfs.NewMemdir("/", file)
 	}
 
 	errChan := make(chan error, 0)
@@ -309,7 +309,7 @@ func (fst *Filestore) Unpin(path string, recursive bool) error {
 }
 
 type wrapFile struct {
-	fs.File
+	qfs.File
 }
 
 func (w wrapFile) NextFile() (files.File, error) {

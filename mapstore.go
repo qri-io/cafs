@@ -9,7 +9,7 @@ import (
 
 	"github.com/jbenet/go-base58"
 	"github.com/multiformats/go-multihash"
-	"github.com/qri-io/fs"
+	"github.com/qri-io/qfs"
 )
 
 // NewMapstore allocates an instance of a mapstore
@@ -98,7 +98,7 @@ func (m MapStore) Print() (string, error) {
 }
 
 // Put adds a file to the store
-func (m *MapStore) Put(file fs.File, pin bool) (key string, err error) {
+func (m *MapStore) Put(file qfs.File, pin bool) (key string, err error) {
 	if file.IsDirectory() {
 		buf := bytes.NewBuffer(nil)
 		dir := fsDir{
@@ -158,7 +158,7 @@ func (m *MapStore) Put(file fs.File, pin bool) (key string, err error) {
 }
 
 // Get returns a File from the store
-func (m *MapStore) Get(key string) (fs.File, error) {
+func (m *MapStore) Get(key string) (qfs.File, error) {
 	// key may be of the form /map/QmFoo/file.json but MapStore indexes its maps
 	// using keys like /map/QmFoo. Trim after the second part of the key.
 	parts := strings.Split(key, "/")
@@ -185,7 +185,7 @@ func (m *MapStore) Get(key string) (fs.File, error) {
 	return nil, ErrNotFound
 }
 
-func (m *MapStore) getLocal(key string) (fs.File, error) {
+func (m *MapStore) getLocal(key string) (qfs.File, error) {
 	if m.Files[key] == nil {
 		return nil, ErrNotFound
 	}
@@ -219,7 +219,7 @@ var _ Fetcher = (*MapStore)(nil)
 var _ Pinner = (*MapStore)(nil)
 
 // Fetch returns a File from the store
-func (m *MapStore) Fetch(source Source, key string) (fs.File, error) {
+func (m *MapStore) Fetch(source Source, key string) (qfs.File, error) {
 	// TODO: Perhaps Fetch should hit the network but Get should not?
 	// Also, see comment in ./ipfs/filestore.go about local lists and integrating Fetch.
 	if len(m.Network) == 0 {
@@ -254,7 +254,7 @@ type adder struct {
 	out      chan AddedFile
 }
 
-func (a *adder) AddFile(f fs.File) error {
+func (a *adder) AddFile(f qfs.File) error {
 	path, err := a.mapstore.Put(f, a.pin)
 	if err != nil {
 		fmt.Errorf("error putting file in mapstore: %s", err.Error())
@@ -298,8 +298,8 @@ type fsFile struct {
 	data []byte
 }
 
-func (f fsFile) File() fs.File {
-	return fs.NewMemfileBytes(f.path, f.data)
+func (f fsFile) File() qfs.File {
+	return qfs.NewMemfileBytes(f.path, f.data)
 }
 
 type fsDir struct {
@@ -308,8 +308,8 @@ type fsDir struct {
 	files []string
 }
 
-func (f fsDir) File() fs.File {
-	files := make([]fs.File, len(f.files))
+func (f fsDir) File() qfs.File {
+	files := make([]qfs.File, len(f.files))
 	for i, path := range f.files {
 		file, err := f.store.Get(path)
 		if err != nil {
@@ -318,9 +318,9 @@ func (f fsDir) File() fs.File {
 		files[i] = file
 	}
 
-	return fs.NewMemdir(f.path, files...)
+	return qfs.NewMemdir(f.path, files...)
 }
 
 type filer interface {
-	File() fs.File
+	File() qfs.File
 }

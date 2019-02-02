@@ -9,6 +9,7 @@ import (
 
 	"github.com/qri-io/cafs"
 	"github.com/qri-io/cafs/test"
+	"github.com/qri-io/qfs"
 )
 
 var _ cafs.Fetcher = (*Filestore)(nil)
@@ -74,7 +75,7 @@ func BenchmarkRead(b *testing.B) {
 		return
 	}
 
-	key, err := f.Put(cafs.NewMemfileBytes(filepath.Base(egFilePath), data), true)
+	key, err := f.Put(qfs.NewMemfileBytes(filepath.Base(egFilePath), data), true)
 	if err != nil {
 		b.Errorf("error putting example file in store: %s", err.Error())
 		return
